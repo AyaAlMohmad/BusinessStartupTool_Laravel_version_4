@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('migrant_profiles', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            
+
             // Personal Info
             $table->string('name')->nullable();
             $table->string('birth_place')->nullable();
@@ -24,7 +24,7 @@ return new class extends Migration
             // $table->string('region')->nullable();
             $table->foreignId('region_id')->constrained()->onDelete('cascade');
 
-            
+
             // Business Info
             $table->enum('business_stage', ['idea', 'started', 'operational'])->nullable();
             $table->text('business_idea')->nullable();
@@ -33,11 +33,11 @@ return new class extends Migration
             $table->string('website_url')->nullable();
             $table->boolean('has_social_media')->default(false);
             $table->text('social_links')->nullable();
-            
+
             // Employment Info
             $table->enum('employment_status', ['employed', 'unemployed', 'student', 'retired', 'other'])->nullable();
             $table->string('employment_role')->nullable();
-            
+
             // Education Info
             $table->enum('is_studying', ['yes', 'no'])->nullable();
             $table->enum('education_level', ['primary', 'secondary', 'trade', 'bachelor', 'diploma', 'master', 'phd'])->nullable();
@@ -46,7 +46,7 @@ return new class extends Migration
             $table->string('diploma_details')->nullable();
             $table->string('master_details')->nullable();
             $table->string('phd_details')->nullable();
-            
+
             $table->timestamps();
         });
 

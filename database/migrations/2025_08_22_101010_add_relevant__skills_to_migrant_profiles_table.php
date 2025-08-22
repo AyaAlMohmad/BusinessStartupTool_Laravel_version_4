@@ -11,13 +11,8 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::create('services', function (Blueprint $table) {
-            $table->id();
-
-            $table->foreignId('website_id')->constrained()->onDelete('cascade');
-            $table->string('name')->nullable();
-            $table->text('description')->nullable();
-            $table->timestamps();
+        Schema::table('migrant_profiles', function (Blueprint $table) {
+          $table->json('relevant_skills')->nullable();
         });
     }
 
@@ -26,6 +21,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::dropIfExists('services');
+        Schema::table('migrant_profiles', function (Blueprint $table) {
+            $table->dropColumn('relevant_skills');
+        });
     }
 };

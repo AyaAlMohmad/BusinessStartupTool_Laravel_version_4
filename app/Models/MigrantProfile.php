@@ -37,13 +37,15 @@ class MigrantProfile extends Model
         'bachelor_details',
         'diploma_details',
         'master_details',
-        'phd_details'
+        'phd_details',
+        'relevant_skills',
     ];
 
     protected $casts = [
         'has_abn' => 'boolean',
         'has_website' => 'boolean',
         'has_social_media' => 'boolean',
+        'relevant_skills' => 'array',
     ];
 
     public function user()

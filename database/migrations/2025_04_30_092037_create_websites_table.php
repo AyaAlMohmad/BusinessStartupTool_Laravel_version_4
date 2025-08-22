@@ -13,16 +13,16 @@ return new class extends Migration
     {
         Schema::create('websites', function (Blueprint $table) {
             $table->id();
-            
+
             $table->foreignId('business_id')->constrained()->onDelete('cascade');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
-            $table->string('business_name');
-            $table->text('business_description');
-            $table->integer('colour_choice');
-            $table->integer('logo_style_choice');
-            $table->text('about_us');
-            $table->text('social_proof');
-            $table->json('contact_info');
+            $table->string('business_name')->nullable();
+            $table->text('business_description')->nullable();
+            $table->integer('colour_choice')->nullable();
+            $table->integer('logo_style_choice')->nullable();
+            $table->text('about_us')->nullable();
+            $table->text('social_proof')->nullable();
+            $table->json('contact_info')->nullable();
             $table->timestamps();
         });
     }

@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('websites', function (Blueprint $table) {
-            $table->boolean('progress')->default(false)->after('notes');
+            $table->boolean('progress')->default(false)->after('contact_info');
         });
     }
 

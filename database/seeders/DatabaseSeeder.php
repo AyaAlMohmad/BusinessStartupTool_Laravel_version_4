@@ -32,8 +32,8 @@ class DatabaseSeeder extends Seeder
         // ]);
         // $this->call(ResourceSeeder::class);
         $this->call([
-            PermissionSeeder::class,
-            // ResourceSeeder::class,
+            // PermissionSeeder::class,
+            ResourceSeeder::class,
             // AdminRoleAndPermissionsSeeder::class,
         ]);
     }

@@ -35,6 +35,8 @@ class MigrantProfileController extends Controller
             'personalInfo.arrivalYear' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
             'personalInfo.visaCategory' => 'nullable|string',
             'personalInfo.region' => 'nullable|string',
+            'personalInfo.relevant_skills' => 'nullable|array',
+
 
             'business.stage' => 'nullable|in:idea,started,operational',
             'business.idea' => 'nullable|string',
@@ -106,9 +108,11 @@ class MigrantProfileController extends Controller
                 'diploma_details' => $request->education['diplomaDetails'] ?? null,
                 'master_details' => $request->education['masterDetails'] ?? null,
                 'phd_details' => $request->education['phdDetails'] ?? null,
+                'relevant_skills' => $request->personalInfo['relevant_skills'] ?? null, // تصحيح هنا
+
             ]);
 
-            // إضافة سجل التوظيف إذا وجد
+
             if (!empty($request->employment['jobs'])) {
                 foreach ($request->employment['jobs'] as $job) {
                     EmploymentHistory::create([
@@ -173,6 +177,8 @@ class MigrantProfileController extends Controller
             'personalInfo.arrivalYear' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
             'personalInfo.visaCategory' => 'nullable|string',
             'personalInfo.region' => 'nullable|string',
+            'personalInfo.relevant_skills' => 'nullable|array',
+
 
             'business.stage' => 'nullable|in:idea,started,operational',
             'business.idea' => 'nullable|string',
@@ -225,6 +231,7 @@ class MigrantProfileController extends Controller
                     'arrival_year' => $request->personalInfo['arrivalYear'] ?? $profile->arrival_year,
                     'visa_category' => $request->personalInfo['visaCategory'] ?? $profile->visa_category,
                     'region_id' => $region_id->id ?? $profile->region_id,
+                    'relevant_skills' => $request->personalInfo['relevant_skills'] ?? $profile->relevant_skills,
                 ]);
             }
 
@@ -333,7 +340,8 @@ class MigrantProfileController extends Controller
                         'id' => $profile->region->id,
                         'name' => $profile->region->name,
                     ]
-                    : null
+                    : null,
+                    'relevant_skills' => $profile->relevant_skills,
 
             ],
             'business' => [
