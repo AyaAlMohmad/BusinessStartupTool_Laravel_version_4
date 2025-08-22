@@ -20,35 +20,6 @@ use Illuminate\Support\Facades\Auth;
 
 class BusinessController extends Controller
 {
-
-    // public function index()
-    // {
-    //     $businesses = Business::where('user_id', auth()->id())
-    //         ->with('user:id,name,email')
-    //         ->select('id', 'name', 'user_id')
-    //         ->get();
-
-    //     return response()->json([
-    //         'success' => true,
-    //         'data' => $businesses
-    //     ], 200);
-    // }
-
-
-    // public function show($id)
-    // {
-    //     $business = Business::where('id', $id)
-    //         ->where('user_id', auth()->id())
-    //         ->with('user:id,name,email')
-    //         ->select('id', 'name', 'user_id')
-    //         ->firstOrFail();
-
-    //     return response()->json([
-    //         'success' => true,
-    //         'data' => $business
-    //     ], 200);
-    // }
-
     public function index()
     {
         $userId = Auth::id();
@@ -57,9 +28,11 @@ class BusinessController extends Controller
             ->select('id', 'name', 'user_id')
             ->get();
 
-        // حساب التقدم لكل business
+        // حساب حالة التقدم لكل business
         $businesses->each(function ($business) use ($userId) {
-            $business->progress = $this->calculateBusinessProgress($business->id, $userId);
+            $progressResult = $this->calculateBusinessProgress($business->id, $userId);
+            $business->progress = $progressResult['has_progress'];
+            $business->progress_details = $progressResult['details'];
         });
 
         return response()->json([
@@ -80,10 +53,10 @@ class BusinessController extends Controller
             ->select('id', 'name', 'user_id')
             ->firstOrFail();
 
-        // حساب التقدم ودمج البيانات
-        $progressDetails = $this->calculateBusinessProgress($business->id, $userId, true);
-        $business->progress = $progressDetails['total_progress'];
-        $business->progress_details = $progressDetails['details'];
+        // حساب حالة التقدم ودمج البيانات
+        $progressResult = $this->calculateBusinessProgress($business->id, $userId);
+        $business->progress = $progressResult['has_progress'];
+        $business->progress_details = $progressResult['details'];
 
         return response()->json([
             'success' => true,
@@ -92,9 +65,9 @@ class BusinessController extends Controller
     }
 
     /**
-     * حساب تقدم Business معين
+     * حساب تقدم Business معين (يعيد true/false لكل قسم)
      */
-    private function calculateBusinessProgress($businessId, $userId, $withDetails = false)
+    private function calculateBusinessProgress($businessId, $userId)
     {
         // النماذج المراد تتبع تقدمها
         $models = [
@@ -109,45 +82,26 @@ class BusinessController extends Controller
             'website' => Website::class,
         ];
 
-        $totalWeight = 0;
-        $totalProgress = 0;
+        $hasAnyProgress = false;
         $details = [];
 
         foreach ($models as $key => $model) {
-            // تحديد الوزن لكل نموذج (يمكن تعديله حسب الأهمية)
-            $weight = 1;
-
             // التحقق من وجود بيانات للنموذج
             $hasData = $model::where('user_id', $userId)
                 ->where('business_id', $businessId)
                 ->exists();
 
-            // حساب التقدم لهذا النموذج
-            $progress = $hasData ? 100 : 0;
-
-            $totalWeight += $weight;
-            $totalProgress += $progress * $weight;
-
-            if ($withDetails) {
-                $details[$key] = [
-                    'has_data' => $hasData,
-                    'progress' => $progress,
-                    'weight' => $weight
-                ];
+            if ($hasData) {
+                $hasAnyProgress = true;
             }
+
+            $details[$key] = $hasData;
         }
 
-        // حساب التقدم الكلي
-        $totalProgress = $totalWeight > 0 ? round($totalProgress / $totalWeight, 2) : 0;
-
-        if ($withDetails) {
-            return [
-                'total_progress' => $totalProgress,
-                'details' => $details
-            ];
-        }
-
-        return $totalProgress;
+        return [
+            'has_progress' => $hasAnyProgress,
+            'details' => $details
+        ];
     }
 
     public function store(Request $request)
@@ -166,7 +120,6 @@ class BusinessController extends Controller
             'data' => $business
         ], Response::HTTP_CREATED);
     }
-
 
     public function update(Request $request, $businessId)
     {
@@ -187,7 +140,6 @@ class BusinessController extends Controller
         ], 200);
     }
 
-
     public function destroy($businessId)
     {
         $business = Business::where('id', $businessId)
@@ -201,7 +153,6 @@ class BusinessController extends Controller
             'message' => 'Business deleted successfully'
         ], 200);
     }
-
 
     public function showLogs($businessId)
     {
@@ -223,9 +174,9 @@ class BusinessController extends Controller
             ]
         ], 200);
     }
+
     private function getValidatedBusinessId(Request $request)
     {
-       
         return $request->business_id;
     }
 }
