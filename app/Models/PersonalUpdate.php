@@ -16,6 +16,8 @@ class PersonalUpdate extends Model
         'increased_business_clarity',
         'increased_confidence',
         'increased_my_network',
+        'business_updates',
+        'employment_updates',
         'notes'
     ];
 
@@ -25,6 +27,9 @@ class PersonalUpdate extends Model
         'increased_business_clarity' => 'boolean',
         'increased_confidence' => 'boolean',
         'increased_my_network' => 'boolean',
+        'business_updates' => 'array',
+        'employment_updates' => 'array',
+        // 'notes' => 'text',
     ];
 
     public function user()

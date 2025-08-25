@@ -20,16 +20,15 @@ class PersonalUpdateController extends Controller
         if (!$personalUpdate) {
             return response()->json([
                 'message' => 'Personal update not found',
-                'data' => null
+                'personal_update' => null
             ], 404);
         }
 
         return response()->json([
             'message' => 'Personal update retrieved successfully',
-            'data' => $personalUpdate
+            'personal_update' => $this->formatPersonalUpdateData($personalUpdate)
         ]);
     }
-
 
     /**
      * Store a newly created resource in storage.
@@ -37,12 +36,14 @@ class PersonalUpdateController extends Controller
     public function store(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'increased_language_proficiency' => 'boolean',
-            'increased_clarity_about_employment' => 'boolean',
-            'increased_business_clarity' => 'boolean',
-            'increased_confidence' => 'boolean',
-            'increased_my_network' => 'boolean',
-            'notes' => 'nullable|string|max:1000'
+            'personal.increased_language_proficiency' => 'boolean',
+            'personal.increased_clarity_about_employment' => 'boolean',
+            'personal.increased_business_clarity' => 'boolean',
+            'personal.increased_confidence' => 'boolean',
+            'personal.increased_my_network' => 'boolean',
+            'business_updates' => 'nullable|array',
+            'employment_updates' => 'nullable|array',
+            'personal.notes' => 'nullable|string|max:1000'
         ]);
 
         if ($validator->fails()) {
@@ -52,14 +53,28 @@ class PersonalUpdateController extends Controller
             ], 422);
         }
 
+        // تحضير البيانات للتخزين
+        $validated = $validator->validated();
+        $data = [
+            'user_id' => Auth::id(),
+            'increased_language_proficiency' => $validated['personal']['increased_language_proficiency'] ?? false,
+            'increased_clarity_about_employment' => $validated['personal']['increased_clarity_about_employment'] ?? false,
+            'increased_business_clarity' => $validated['personal']['increased_business_clarity'] ?? false,
+            'increased_confidence' => $validated['personal']['increased_confidence'] ?? false,
+            'increased_my_network' => $validated['personal']['increased_my_network'] ?? false,
+            'notes' => $validated['personal']['notes'] ?? null,
+            'business_updates' => $validated['business_updates'] ?? [],
+            'employment_updates' => $validated['employment_updates'] ?? []
+        ];
+
         $personalUpdate = PersonalUpdate::updateOrCreate(
             ['user_id' => Auth::id()],
-            $validator->validated()
+            $data
         );
 
         return response()->json([
             'message' => 'Personal update saved successfully',
-            'data' => $personalUpdate
+            'personal_update' => $this->formatPersonalUpdateData($personalUpdate)
         ], 200);
     }
 
@@ -74,13 +89,14 @@ class PersonalUpdateController extends Controller
 
         if (!$personalUpdate) {
             return response()->json([
-                'message' => 'Personal update not found'
+                'message' => 'Personal update not found',
+                'personal_update' => null
             ], 404);
         }
 
         return response()->json([
             'message' => 'Personal update retrieved successfully',
-            'data' => $personalUpdate
+            'personal_update' => $this->formatPersonalUpdateData($personalUpdate)
         ]);
     }
 
@@ -95,17 +111,20 @@ class PersonalUpdateController extends Controller
 
         if (!$personalUpdate) {
             return response()->json([
-                'message' => 'Personal update not found'
+                'message' => 'Personal update not found',
+                'personal_update' => null
             ], 404);
         }
 
         $validator = Validator::make($request->all(), [
-            'increased_language_proficiency' => 'boolean',
-            'increased_clarity_about_employment' => 'boolean',
-            'increased_business_clarity' => 'boolean',
-            'increased_confidence' => 'boolean',
-            'increased_my_network' => 'boolean',
-            'notes' => 'nullable|string|max:1000'
+            'personal.increased_language_proficiency' => 'boolean',
+            'personal.increased_clarity_about_employment' => 'boolean',
+            'personal.increased_business_clarity' => 'boolean',
+            'personal.increased_confidence' => 'boolean',
+            'personal.increased_my_network' => 'boolean',
+            'business_updates' => 'nullable|array',
+            'employment_updates' => 'nullable|array',
+            'personal.notes' => 'nullable|string|max:1000'
         ]);
 
         if ($validator->fails()) {
@@ -115,14 +134,26 @@ class PersonalUpdateController extends Controller
             ], 422);
         }
 
-        $personalUpdate->update($validator->validated());
+        // تحضير البيانات للتحديث
+        $validated = $validator->validated();
+        $data = [
+            'increased_language_proficiency' => $validated['personal']['increased_language_proficiency'] ?? false,
+            'increased_clarity_about_employment' => $validated['personal']['increased_clarity_about_employment'] ?? false,
+            'increased_business_clarity' => $validated['personal']['increased_business_clarity'] ?? false,
+            'increased_confidence' => $validated['personal']['increased_confidence'] ?? false,
+            'increased_my_network' => $validated['personal']['increased_my_network'] ?? false,
+            'notes' => $validated['personal']['notes'] ?? null,
+            'business_updates' => $validated['business_updates'] ?? [],
+            'employment_updates' => $validated['employment_updates'] ?? []
+        ];
+
+        $personalUpdate->update($data);
 
         return response()->json([
             'message' => 'Personal update updated successfully',
-            'data' => $personalUpdate
+            'personal_update' => $this->formatPersonalUpdateData($personalUpdate)
         ]);
     }
-
 
     /**
      * Remove the specified resource from storage.
@@ -135,14 +166,62 @@ class PersonalUpdateController extends Controller
 
         if (!$personalUpdate) {
             return response()->json([
-                'message' => 'Personal update not found'
+                'message' => 'Personal update not found',
+                'personal_update' => null
             ], 404);
         }
 
         $personalUpdate->delete();
 
         return response()->json([
-            'message' => 'Personal update deleted successfully'
+            'message' => 'Personal update deleted successfully',
+            'personal_update' => null
         ]);
+    }
+
+    /**
+     * تنسيق بيانات التحديث الشخصي
+     */
+    private function formatPersonalUpdateData($personalUpdate)
+    {
+        // جمع التحديثات الشخصية في مصفوفة personal_updates
+        $personalUpdates = [
+            [
+                'label' => 'Increased language proficiency',
+                'key' => 'increased_language_proficiency',
+                'done' => (bool) $personalUpdate->increased_language_proficiency
+            ],
+            [
+                'label' => 'Increased clarity about employment',
+                'key' => 'increased_clarity_about_employment',
+                'done' => (bool) $personalUpdate->increased_clarity_about_employment
+            ],
+            [
+                'label' => 'Increased business clarity',
+                'key' => 'increased_business_clarity',
+                'done' => (bool) $personalUpdate->increased_business_clarity
+            ],
+            [
+                'label' => 'Increased confidence',
+                'key' => 'increased_confidence',
+                'done' => (bool) $personalUpdate->increased_confidence
+            ],
+            [
+                'label' => 'Increased my network',
+                'key' => 'increased_my_network',
+                'done' => (bool) $personalUpdate->increased_my_network
+            ]
+        ];
+
+        return [
+            'id' => $personalUpdate->id,
+            'user_id' => $personalUpdate->user_id,
+            'personal_updates' => $personalUpdates, // التحديثات الشخصية مجمعة هنا
+            'business_updates' => $personalUpdate->business_updates ?? [],
+            'employment_updates' => $personalUpdate->employment_updates ?? [],
+            'notes' => $personalUpdate->notes,
+            'created_at' => $personalUpdate->created_at,
+            'updated_at' => $personalUpdate->updated_at
+        ];
     }
 }

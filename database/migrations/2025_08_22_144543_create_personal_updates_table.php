@@ -14,11 +14,16 @@ return new class extends Migration
         Schema::create('personal_updates', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
+
             $table->boolean('increased_language_proficiency')->default(false);
             $table->boolean('increased_clarity_about_employment')->default(false);
             $table->boolean('increased_business_clarity')->default(false);
             $table->boolean('increased_confidence')->default(false);
             $table->boolean('increased_my_network')->default(false);
+            $table->json('business_updates')->nullable();
+
+            $table->json('employment_updates')->nullable();
+
             $table->text('notes')->nullable();
             $table->timestamps();
         });
