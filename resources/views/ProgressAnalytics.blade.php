@@ -95,14 +95,14 @@
                     </div>
                 </div>
             </div>
-            <div class="col-12 col-lg-6">
+            {{-- <div class="col-12 col-lg-6">
                 <div class="card stat-card">
                     <div class="card-body chart-container">
                         <div class="card-title">Age Groups</div>
                         <canvas id="ageChart" width="400" height="350"></canvas>
                     </div>
                 </div>
-            </div>
+            </div> --}}
         </div>
 
         {{-- مخططات اللغات والخبرة --}}

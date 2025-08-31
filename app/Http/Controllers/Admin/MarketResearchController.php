@@ -5,18 +5,42 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\MarketResearch;
 use App\Models\AuditLog;
+use Illuminate\Support\Facades\Auth;
 
 class MarketResearchController extends Controller
 {
     public function index()
     {
-        $researches = MarketResearch::with(['user', 'business'])->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $researches = MarketResearch::with(['user', 'business'])->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            // عرض market researches للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
+            $researches = MarketResearch::whereHas('user.roles', function($query) use ($userRoleIds) {
+                $query->whereIn('roles.id', $userRoleIds);
+            })->with(['user', 'business'])->get();
+        }
+
         return view('admin.market-research.index', compact('researches'));
     }
 
     public function analysis()
     {
-        $logs = AuditLog::where('table_name', 'market_research')->latest()->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $logs = AuditLog::where('table_name', 'market_research')->latest()->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            $logs = AuditLog::where('table_name', 'market_research')
+                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
+                            $query->whereIn('roles.id', $userRoleIds);
+                        })
+                        ->latest()
+                        ->get();
+        }
 
         $fieldCounts = [];
         $modificationsPerDay = [];
@@ -43,6 +67,17 @@ class MarketResearchController extends Controller
     {
         $research = MarketResearch::with(['user', 'business'])->findOrFail($id);
 
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $researchUserRoleIds = $research->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم market research أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($researchUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.market-research.index')->with('error', 'Access denied');
+            }
+        }
+
         $auditLogs = AuditLog::where('table_name', 'market_research')
             ->where('record_id', $research->id)
             ->latest()
@@ -56,7 +91,19 @@ class MarketResearchController extends Controller
 
     public function destroy($id)
     {
-        $research = MarketResearch::findOrFail($id);
+        $research = MarketResearch::with('user')->findOrFail($id);
+
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $researchUserRoleIds = $research->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم market research أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($researchUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.market-research.index')->with('error', 'Access denied');
+            }
+        }
+
         $research->delete();
 
         return redirect()->route('admin.market-research.index')

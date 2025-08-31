@@ -6,18 +6,42 @@ use App\Http\Controllers\Controller;
 use App\Models\TestingYourIdea;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class TestingYourIdeaController extends Controller
 {
     public function index()
     {
-        $ideas = TestingYourIdea::with(['user', 'business'])->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $ideas = TestingYourIdea::with(['user', 'business'])->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            // عرض testing ideas للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
+            $ideas = TestingYourIdea::whereHas('user.roles', function($query) use ($userRoleIds) {
+                $query->whereIn('roles.id', $userRoleIds);
+            })->with(['user', 'business'])->get();
+        }
+
         return view('admin.testing-your-idea.index', compact('ideas'));
     }
 
     public function analysis()
     {
-        $logs = AuditLog::where('table_name', 'testing_your_idea')->latest()->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $logs = AuditLog::where('table_name', 'testing_your_idea')->latest()->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            $logs = AuditLog::where('table_name', 'testing_your_idea')
+                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
+                            $query->whereIn('roles.id', $userRoleIds);
+                        })
+                        ->latest()
+                        ->get();
+        }
 
         $fieldCounts = [];
         $modificationsPerDay = [];
@@ -44,6 +68,17 @@ class TestingYourIdeaController extends Controller
     {
         $idea = TestingYourIdea::with(['user', 'business'])->findOrFail($id);
 
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $ideaUserRoleIds = $idea->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم testing idea أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($ideaUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.testing-your-idea.index')->with('error', 'Access denied');
+            }
+        }
+
         $auditLogs = AuditLog::where('table_name', 'testing_your_idea')
             ->where('record_id', $idea->id)
             ->latest()
@@ -57,7 +92,19 @@ class TestingYourIdeaController extends Controller
 
     public function destroy($id)
     {
-        $idea = TestingYourIdea::findOrFail($id);
+        $idea = TestingYourIdea::with('user')->findOrFail($id);
+
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $ideaUserRoleIds = $idea->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم testing idea أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($ideaUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.testing-your-idea.index')->with('error', 'Access denied');
+            }
+        }
+
         $idea->delete();
 
         return redirect()->route('admin.testing-your-idea.index')

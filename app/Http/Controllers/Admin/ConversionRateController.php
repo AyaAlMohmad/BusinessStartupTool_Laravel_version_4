@@ -5,18 +5,42 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\ConversionRate;
 use App\Models\AuditLog;
+use Illuminate\Support\Facades\Auth;
 
 class ConversionRateController extends Controller
 {
     public function index()
     {
-        $conversionRates = ConversionRate::with(['user', 'business'])->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $conversionRates = ConversionRate::with(['user', 'business'])->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            // عرض conversion rates للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
+            $conversionRates = ConversionRate::whereHas('user.roles', function($query) use ($userRoleIds) {
+                $query->whereIn('roles.id', $userRoleIds);
+            })->with(['user', 'business'])->get();
+        }
+
         return view('admin.conversion-rates.index', compact('conversionRates'));
     }
 
     public function analysis()
     {
-        $logs = AuditLog::where('table_name', 'conversion_rates')->latest()->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $logs = AuditLog::where('table_name', 'conversion_rates')->latest()->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            $logs = AuditLog::where('table_name', 'conversion_rates')
+                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
+                            $query->whereIn('roles.id', $userRoleIds);
+                        })
+                        ->latest()
+                        ->get();
+        }
 
         $fieldCounts = [];
         $modificationsPerDay = [];
@@ -43,6 +67,17 @@ class ConversionRateController extends Controller
     {
         $conversionRate = ConversionRate::with(['user', 'business'])->findOrFail($id);
 
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $conversionRateUserRoleIds = $conversionRate->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم conversion rate أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($conversionRateUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.conversion-rates.index')->with('error', 'Access denied');
+            }
+        }
+
         $auditLogs = AuditLog::where('table_name', 'conversion_rates')
             ->where('record_id', $conversionRate->id)
             ->latest()
@@ -56,7 +91,19 @@ class ConversionRateController extends Controller
 
     public function destroy($id)
     {
-        $conversionRate = ConversionRate::findOrFail($id);
+        $conversionRate = ConversionRate::with('user')->findOrFail($id);
+
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $conversionRateUserRoleIds = $conversionRate->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم conversion rate أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($conversionRateUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.conversion-rates.index')->with('error', 'Access denied');
+            }
+        }
+
         $conversionRate->delete();
 
         return redirect()->route('admin.conversion-rates.index')

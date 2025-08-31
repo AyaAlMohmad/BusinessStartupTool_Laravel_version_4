@@ -5,12 +5,23 @@ use App\Http\Controllers\Controller;
 use App\Models\Story;
 use App\Models\AuditLog;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class StoryController extends Controller
 {
     public function index()
     {
-        $stories = Story::with(['user'])->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $stories = Story::with(['user'])->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            // عرض stories للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
+            $stories = Story::whereHas('user.roles', function($query) use ($userRoleIds) {
+                $query->whereIn('roles.id', $userRoleIds);
+            })->with(['user'])->get();
+        }
 
         return view('admin.stories.index', compact('stories'));
     }
@@ -18,6 +29,17 @@ class StoryController extends Controller
     public function show($id)
     {
         $story = Story::with(['user'])->findOrFail($id);
+
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $storyUserRoleIds = $story->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم story أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($storyUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.stories.index')->with('error', 'Access denied');
+            }
+        }
 
         $auditLogs = AuditLog::where('table_name', 'stories')
             ->where('record_id', $story->id)
@@ -32,7 +54,19 @@ class StoryController extends Controller
 
     public function destroy($id)
     {
-        $story = Story::findOrFail($id);
+        $story = Story::with('user')->findOrFail($id);
+
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $storyUserRoleIds = $story->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم story أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($storyUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.stories.index')->with('error', 'Access denied');
+            }
+        }
+
         $story->delete();
 
         return redirect()->route('admin.stories.index')
@@ -41,7 +75,19 @@ class StoryController extends Controller
 
     public function analysis()
     {
-        $logs = AuditLog::where('table_name', 'stories')->latest()->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $logs = AuditLog::where('table_name', 'stories')->latest()->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            $logs = AuditLog::where('table_name', 'stories')
+                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
+                            $query->whereIn('roles.id', $userRoleIds);
+                        })
+                        ->latest()
+                        ->get();
+        }
 
         $fieldCounts = [];
         $modificationsPerDay = [];

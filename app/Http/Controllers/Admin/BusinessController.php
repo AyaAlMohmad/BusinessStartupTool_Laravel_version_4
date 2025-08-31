@@ -5,18 +5,42 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Models\AuditLog;
+use Illuminate\Support\Facades\Auth;
 
 class BusinessController extends Controller
 {
     public function index()
     {
-        $businesses = Business::with('user')->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $businesses = Business::with('user')->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            // عرض businesses للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
+            $businesses = Business::whereHas('user.roles', function($query) use ($userRoleIds) {
+                $query->whereIn('roles.id', $userRoleIds);
+            })->with('user')->get();
+        }
+
         return view('admin.businesses.index', compact('businesses'));
     }
 
     public function analysis()
     {
-        $logs = AuditLog::where('table_name', 'businesses')->latest()->get();
+        if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
+            $logs = AuditLog::where('table_name', 'businesses')->latest()->get();
+        } else {
+            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
+            $userRoleIds = Auth::user()->roles->pluck('id');
+
+            $logs = AuditLog::where('table_name', 'businesses')
+                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
+                            $query->whereIn('roles.id', $userRoleIds);
+                        })
+                        ->latest()
+                        ->get();
+        }
 
         $fieldCounts = [];
         $modificationsPerDay = [];
@@ -43,6 +67,17 @@ class BusinessController extends Controller
     {
         $business = Business::with('user')->findOrFail($id);
 
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $businessUserRoleIds = $business->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم business أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($businessUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.businesses.index')->with('error', 'Access denied');
+            }
+        }
+
         $auditLogs = AuditLog::where('table_name', 'businesses')
             ->where('record_id', $business->id)
             ->latest()
@@ -56,7 +91,19 @@ class BusinessController extends Controller
 
     public function destroy($id)
     {
-        $business = Business::findOrFail($id);
+        $business = Business::with('user')->findOrFail($id);
+
+        // التحقق من الصلاحية إذا لم يكن admin
+        if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
+            $userRoleIds = Auth::user()->roles->pluck('id');
+            $businessUserRoleIds = $business->user->roles->pluck('id');
+
+            // إذا لم يكن لدى مستخدم business أي دور مشترك مع المستخدم الحالي
+            if ($userRoleIds->intersect($businessUserRoleIds)->isEmpty()) {
+                return redirect()->route('admin.businesses.index')->with('error', 'Access denied');
+            }
+        }
+
         $business->delete();
 
         return redirect()->route('admin.businesses.index')
