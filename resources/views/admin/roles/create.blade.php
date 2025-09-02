@@ -19,17 +19,37 @@
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label for="name">Role Name</label>
-                                <input type="text" class="form-control" id="name" name="name" required>
+                                <input type="text" class="form-control" id="name" name="name" value="{{ old('name') }}" required>
+                                @error('name') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="form-group">
                                 <label for="status">Status</label>
                                 <select class="form-control" id="status" name="status" required>
-                                    <option value="active">Active</option>
-                                    <option value="inactive">Inactive</option>
-                                    <option value="blocked">Blocked</option>
+                                    <option value="active"   @selected(old('status')==='active')>Active</option>
+                                    <option value="inactive" @selected(old('status')==='inactive')>Inactive</option>
+                                    <option value="blocked"  @selected(old('status')==='blocked')>Blocked</option>
                                 </select>
+                                @error('status') <small class="text-danger">{{ $message }}</small> @enderror
+                            </div>
+                        </div>
+                    </div>
+
+                    {{-- NEW: Region select --}}
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="region_id">Region</label>
+                                <select class="form-control" id="region_id" name="region_id" required>
+                                    <option value="" disabled {{ old('region_id') ? '' : 'selected' }}>Choose region</option>
+                                    @foreach($regions as $region)
+                                        <option value="{{ $region->id }}" @selected(old('region_id') == $region->id)>
+                                            {{ $region->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                                @error('region_id') <small class="text-danger">{{ $message }}</small> @enderror
                             </div>
                         </div>
                     </div>

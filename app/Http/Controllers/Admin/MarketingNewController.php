@@ -12,16 +12,32 @@ class MarketingNewController extends Controller
 {
     public function index()
     {
+        // الأدمن يرى الجميع
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $features = ProductFeature::with(['user', 'business', 'marketingCampaigns'])->get();
+            $features = ProductFeature::with([
+                'user.migrantProfile.region',
+                'business',
+                'marketingCampaigns'
+            ])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // جمع مناطق الأدوار للمستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض product features للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $features = ProductFeature::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['user', 'business', 'marketingCampaigns'])->get();
+            if (empty($myRegionIds)) {
+                $features = collect(); // لا يرى شيئًا
+            } else {
+                // ميزات المنتجات التابعة لمستخدمين مناطقهم ضمن مناطق أدوار الحالي
+                $features = ProductFeature::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region', 'business', 'marketingCampaigns'])
+                    ->get();
+            }
         }
 
         return view('admin.product-features.index', compact('features'));
@@ -29,20 +45,30 @@ class MarketingNewController extends Controller
 
     public function analysis()
     {
+        // الأدمن يرى كل السجلات
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
             $logs = AuditLog::whereIn('table_name', ['product_features', 'marketing_campaigns'])
                 ->latest()
                 ->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            $logs = AuditLog::whereIn('table_name', ['product_features', 'marketing_campaigns'])
-                ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                    $query->whereIn('roles.id', $userRoleIds);
-                })
-                ->latest()
-                ->get();
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات حسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::whereIn('table_name', ['product_features', 'marketing_campaigns'])
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
         $fieldCounts = [];
@@ -59,24 +85,30 @@ class MarketingNewController extends Controller
             $modificationsPerDay[$date] = ($modificationsPerDay[$date] ?? 0) + 1;
         }
 
-        $modificationsPerDay = collect($modificationsPerDay)->map(function ($count, $date) {
-            return ['date' => $date, 'count' => $count];
-        })->sortBy('date')->values();
+        $modificationsPerDay = collect($modificationsPerDay)
+            ->map(fn ($count, $date) => ['date' => $date, 'count' => $count])
+            ->sortBy('date')
+            ->values();
 
         return view('admin.product-features.analysis', compact('modificationsPerDay', 'fieldCounts'));
     }
 
     public function show($id)
     {
-        $feature = ProductFeature::with(['marketingCampaigns', 'user'])->findOrFail($id);
+        $feature = ProductFeature::with(['marketingCampaigns', 'user.migrantProfile.region'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $featureUserRoleIds = $feature->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم product feature أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($featureUserRoleIds)->isEmpty()) {
+            $featureRegionId = optional(optional($feature->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$featureRegionId || !in_array($featureRegionId, $myRegionIds)) {
                 return redirect()->route('admin.product-features.index')->with('error', 'Access denied');
             }
         }
@@ -85,12 +117,12 @@ class MarketingNewController extends Controller
         $combinedData = $feature->getAttributes();
 
         // إضافة بيانات الحملات مع استثناء الحقول غير المرغوبة
-        $campaignIds = []; // لتخزين IDs الحملات
+        $campaignIds = [];
         if ($feature->marketingCampaigns->isNotEmpty()) {
             $excludedFields = ['id', 'user_id', 'business_id', 'product_feature_id', 'created_at', 'updated_at'];
 
             foreach ($feature->marketingCampaigns as $index => $campaign) {
-                $campaignIds[] = $campaign->id; // جمع IDs الحملات
+                $campaignIds[] = $campaign->id;
                 foreach ($campaign->getAttributes() as $key => $value) {
                     if (!in_array($key, $excludedFields)) {
                         $combinedData["Campaign " . ($index + 1) . " - " . ucfirst($key)] = $value;
@@ -101,15 +133,15 @@ class MarketingNewController extends Controller
 
         // الحصول على سجلات التعديل لكلا الجدولين
         $auditLogs = AuditLog::where(function($query) use ($feature) {
-            $query->where('table_name', 'product_features')
-                  ->where('record_id', $feature->id);
-        })
-        ->orWhere(function($query) use ($campaignIds) {
-            $query->where('table_name', 'marketing_campaigns')
-                  ->whereIn('record_id', $campaignIds);
-        })
-        ->latest()
-        ->get();
+                $query->where('table_name', 'product_features')
+                      ->where('record_id', $feature->id);
+            })
+            ->orWhere(function($query) use ($campaignIds) {
+                $query->where('table_name', 'marketing_campaigns')
+                      ->whereIn('record_id', $campaignIds);
+            })
+            ->latest()
+            ->get();
 
         $latestLog = $auditLogs->first();
         $oldData = $latestLog ? $latestLog->old_data : [];
@@ -119,15 +151,19 @@ class MarketingNewController extends Controller
 
     public function destroy($id)
     {
-        $feature = ProductFeature::with('user')->findOrFail($id);
+        $feature = ProductFeature::with('user.migrantProfile')->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $featureUserRoleIds = $feature->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم product feature أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($featureUserRoleIds)->isEmpty()) {
+            $featureRegionId = optional(optional($feature->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$featureRegionId || !in_array($featureRegionId, $myRegionIds)) {
                 return redirect()->route('admin.product-features.index')->with('error', 'Access denied');
             }
         }

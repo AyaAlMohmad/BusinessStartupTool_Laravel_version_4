@@ -11,16 +11,31 @@ class ConversionRateController extends Controller
 {
     public function index()
     {
+        // الأدمن يشوف الكل
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $conversionRates = ConversionRate::with(['user', 'business'])->get();
+            $conversionRates = ConversionRate::with([
+                'user.migrantProfile.region', // لإظهار المنطقة
+                'business'
+            ])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق أدوار المستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض conversion rates للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $conversionRates = ConversionRate::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['user', 'business'])->get();
+            if (empty($myRegionIds)) {
+                $conversionRates = collect();
+            } else {
+                // السجلات التي أصحابها ضمن مناطق أدوار المستخدم
+                $conversionRates = ConversionRate::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region', 'business'])
+                    ->get();
+            }
         }
 
         return view('admin.conversion-rates.index', compact('conversionRates'));
@@ -29,17 +44,28 @@ class ConversionRateController extends Controller
     public function analysis()
     {
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $logs = AuditLog::where('table_name', 'conversion_rates')->latest()->get();
-        } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
-
             $logs = AuditLog::where('table_name', 'conversion_rates')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+                ->latest()
+                ->get();
+        } else {
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات بحسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::where('table_name', 'conversion_rates')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
         $fieldCounts = [];
@@ -56,24 +82,28 @@ class ConversionRateController extends Controller
             $modificationsPerDay[$date] = ($modificationsPerDay[$date] ?? 0) + 1;
         }
 
-        $modificationsPerDay = collect($modificationsPerDay)->map(function ($count, $date) {
-            return ['date' => $date, 'count' => $count];
-        })->sortBy('date')->values();
+        $modificationsPerDay = collect($modificationsPerDay)->map(fn ($count, $date) => ['date' => $date, 'count' => $count])
+            ->sortBy('date')->values();
 
         return view('admin.conversion-rates.analysis', compact('modificationsPerDay', 'fieldCounts'));
     }
 
     public function show($id)
     {
-        $conversionRate = ConversionRate::with(['user', 'business'])->findOrFail($id);
+        $conversionRate = ConversionRate::with(['user.migrantProfile.region', 'business'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $conversionRateUserRoleIds = $conversionRate->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم conversion rate أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($conversionRateUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($conversionRate->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.conversion-rates.index')->with('error', 'Access denied');
             }
         }
@@ -84,22 +114,26 @@ class ConversionRateController extends Controller
             ->get();
 
         $latestLog = $auditLogs->first();
-        $oldData = $latestLog ? $latestLog->old_data : null;
+        $oldData   = $latestLog ? $latestLog->old_data : null;
 
         return view('admin.conversion-rates.show', compact('conversionRate', 'oldData', 'auditLogs'));
     }
 
     public function destroy($id)
     {
-        $conversionRate = ConversionRate::with('user')->findOrFail($id);
+        $conversionRate = ConversionRate::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $conversionRateUserRoleIds = $conversionRate->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم conversion rate أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($conversionRateUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($conversionRate->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.conversion-rates.index')->with('error', 'Access denied');
             }
         }

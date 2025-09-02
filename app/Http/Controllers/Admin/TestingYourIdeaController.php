@@ -5,23 +5,34 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\TestingYourIdea;
 use App\Models\AuditLog;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
 class TestingYourIdeaController extends Controller
 {
     public function index()
     {
+        // الأدمن يرى الجميع
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $ideas = TestingYourIdea::with(['user', 'business'])->get();
+            $ideas = TestingYourIdea::with(['user.migrantProfile.region', 'business'])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق أدوار المستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض testing ideas للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $ideas = TestingYourIdea::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['user', 'business'])->get();
+            if (empty($myRegionIds)) {
+                $ideas = collect(); // لا يرى شيئًا
+            } else {
+                // السجلات التي أصحابها ضمن مناطق أدوار المستخدم
+                $ideas = TestingYourIdea::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region', 'business'])
+                    ->get();
+            }
         }
 
         return view('admin.testing-your-idea.index', compact('ideas'));
@@ -32,17 +43,27 @@ class TestingYourIdeaController extends Controller
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
             $logs = AuditLog::where('table_name', 'testing_your_idea')->latest()->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            $logs = AuditLog::where('table_name', 'testing_your_idea')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات حسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::where('table_name', 'testing_your_idea')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
+        // نفس معالجتك الحالية
         $fieldCounts = [];
         $modificationsPerDay = [];
 
@@ -57,24 +78,30 @@ class TestingYourIdeaController extends Controller
             $modificationsPerDay[$date] = ($modificationsPerDay[$date] ?? 0) + 1;
         }
 
-        $modificationsPerDay = collect($modificationsPerDay)->map(function ($count, $date) {
-            return ['date' => $date, 'count' => $count];
-        })->sortBy('date')->values();
+        $modificationsPerDay = collect($modificationsPerDay)
+            ->map(fn ($count, $date) => ['date' => $date, 'count' => $count])
+            ->sortBy('date')
+            ->values();
 
         return view('admin.testing-your-idea.analysis', compact('modificationsPerDay', 'fieldCounts'));
     }
 
     public function show($id)
     {
-        $idea = TestingYourIdea::with(['user', 'business'])->findOrFail($id);
+        $idea = TestingYourIdea::with(['user.migrantProfile.region', 'business'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $ideaUserRoleIds = $idea->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم testing idea أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($ideaUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($idea->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.testing-your-idea.index')->with('error', 'Access denied');
             }
         }
@@ -85,22 +112,26 @@ class TestingYourIdeaController extends Controller
             ->get();
 
         $latestLog = $auditLogs->first();
-        $oldData = $latestLog ? $latestLog->old_data : null;
+        $oldData   = $latestLog ? $latestLog->old_data : null;
 
         return view('admin.testing-your-idea.show', compact('idea', 'oldData', 'auditLogs'));
     }
 
     public function destroy($id)
     {
-        $idea = TestingYourIdea::with('user')->findOrFail($id);
+        $idea = TestingYourIdea::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $ideaUserRoleIds = $idea->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم testing idea أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($ideaUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($idea->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.testing-your-idea.index')->with('error', 'Access denied');
             }
         }

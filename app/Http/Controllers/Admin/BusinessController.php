@@ -11,16 +11,29 @@ class BusinessController extends Controller
 {
     public function index()
     {
+        // الأدمن يشوف الكل
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $businesses = Business::with('user')->get();
+            $businesses = Business::with(['user.migrantProfile.region'])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق أدوار المستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض businesses للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $businesses = Business::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with('user')->get();
+            // لو ما له مناطق، ما يشوف شيء
+            if (empty($myRegionIds)) {
+                $businesses = collect(); // مجموعة فاضية
+            } else {
+                // أظهر الـbusinesses لمستخدمين مناطقهم ضمن مناطق أدوار الحالي
+                $businesses = Business::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region'])
+                    ->get();
+            }
         }
 
         return view('admin.businesses.index', compact('businesses'));
@@ -28,20 +41,33 @@ class BusinessController extends Controller
 
     public function analysis()
     {
+        // الأدمن يشوف كل اللوجات
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $logs = AuditLog::where('table_name', 'businesses')->latest()->get();
-        } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
-
             $logs = AuditLog::where('table_name', 'businesses')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+                ->latest()
+                ->get();
+        } else {
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات حسب منطقة صاحب التعديل (user) عبر بروفايله
+                $logs = AuditLog::where('table_name', 'businesses')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
+        // نفس معالجتك
         $fieldCounts = [];
         $modificationsPerDay = [];
 
@@ -65,15 +91,20 @@ class BusinessController extends Controller
 
     public function show($id)
     {
-        $business = Business::with('user')->findOrFail($id);
+        $business = Business::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // لو مو أدمن، تأكد أن منطقة مستخدم الـbusiness ∈ مناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $businessUserRoleIds = $business->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم business أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($businessUserRoleIds)->isEmpty()) {
+            $businessRegionId = optional(optional($business->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$businessRegionId || !in_array($businessRegionId, $myRegionIds)) {
                 return redirect()->route('admin.businesses.index')->with('error', 'Access denied');
             }
         }
@@ -91,15 +122,19 @@ class BusinessController extends Controller
 
     public function destroy($id)
     {
-        $business = Business::with('user')->findOrFail($id);
+        $business = Business::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $businessUserRoleIds = $business->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم business أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($businessUserRoleIds)->isEmpty()) {
+            $businessRegionId = optional(optional($business->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$businessRegionId || !in_array($businessRegionId, $myRegionIds)) {
                 return redirect()->route('admin.businesses.index')->with('error', 'Access denied');
             }
         }

@@ -6,16 +6,29 @@
                 <h1>User Details</h1>
             </div>
             <div class="card-body">
-                <p><strong>Username:</strong> {{ $user->username }}</p>
+                <p><strong>Name:</strong> {{ $user->name }}</p> {{-- كان Username --}}
                 <p><strong>Email:</strong> {{ $user->email }}</p>
-                <p><strong>Status:</strong> 
+
+                <p><strong>Status:</strong>
                     <span class="status-badge" style="background-color: {{ $user->status == 'active' ? '#28a745' : '#dc3545' }};">
                         {{ ucfirst($user->status) }}
                     </span>
                 </p>
+
+                {{-- NEW: Region from MigrantProfile --}}
+                <p><strong>Region:</strong>
+                    {{ optional(optional($user->migrantProfile)->region)->name ?? '—' }}
+                </p>
+
+                {{-- NEW: Roles list (names) --}}
+                <p><strong>Roles:</strong>
+                    {{ $user->roles->pluck('name')->join(', ') ?: '—' }}
+                </p>
+
                 <p><strong>Registration Date:</strong> {{ $user->created_at->format('d/m/Y') }}</p>
                 <p><strong>Last Login:</strong> {{ $user->last_login ? $user->last_login->format('d/m/Y') : 'Never' }}</p>
             </div>
+
             <div class="card-footer">
                 <a href="{{ route('admin.users.index') }}" class="btn btn-primary">Back to User Management</a>
             </div>

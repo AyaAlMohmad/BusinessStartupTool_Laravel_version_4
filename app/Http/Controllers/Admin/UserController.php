@@ -9,38 +9,56 @@ use Illuminate\Http\Request;
 
 class UserController extends Controller
 {
-    // public function index()
-    // {
-    //     $users = User::with('role')->paginate(10);
-    //     $roles = Role::all(); // إضافة هذا السطر لتمرير الأدوار للعرض
-    //     return view('admin.users.index', compact('users', 'roles'));
-    // }
-// في UserController
-public function index(Request $request)
-{
-    $query = User::query();
+    public function index(Request $request)
+    {
+        $query = User::with(['roles','migrantProfile']);
 
-    // تصفية المستخدمين بناءً على النوع
-    if ($request->type == 'regular') {
-        $query->where('is_admin', 0);  // المستخدمين العاديين
-    } elseif ($request->type == 'role') {
-        $query->whereHas('roles');  // المستخدمين الذين لديهم أدوار
+        // اجمع المناطق من أدوار المستخدم الحالي
+        $myRegionIds = auth()->user()
+            ->roles()
+            ->pluck('region_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        // إن لم يكن super admin (أو أي استثناء عندك)، قَيِّد بالرؤية حسب المناطق
+        if (!auth()->user()->is_admin) {
+            // إن ما عنده مناطق، ما يعرض شيء
+            $myRegionIds = $myRegionIds ?: [-1];
+            $query->whereHas('migrantProfile', function ($q) use ($myRegionIds) {
+                $q->whereIn('region_id', $myRegionIds);
+            });
+        }
+
+        // فلاتر إضافية بحسب النوع
+        if ($request->type == 'regular') {
+            $query->where('is_admin', 0);
+        } elseif ($request->type == 'role') {
+            $query->whereHas('roles');
+        }
+
+        $users = $query->paginate(10);
+        $roles = Role::all();
+
+        return view('admin.users.index', compact('users', 'roles'));
     }
-
-    $users = $query->paginate(10);
-    $roles = Role::all(); // إضافة هذا السطر لتمرير الأدوار للعرض
-
-    return view('admin.users.index', compact('users', 'roles'));
-}
-
-
 
     public function show($id)
     {
-        $user = User::with('role')->find($id);
+        $user = User::with(['roles','migrantProfile'])->find($id);
 
         if (!$user) {
             return redirect()->route('admin.users.index')->with('error', 'User not found');
+        }
+
+        // منع الوصول خارج مناطق الأدوار (إختياري لكن مهم)
+        if (!auth()->user()->is_admin) {
+            $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
+            $inMyRegion = $user->migrantProfile && in_array($user->migrantProfile->region_id, $myRegionIds);
+            if (!$inMyRegion) {
+                abort(403, 'You do not have permission to access this user.');
+            }
         }
 
         return view('admin.users.show', compact('user'));
@@ -48,57 +66,65 @@ public function index(Request $request)
 
     public function edit($id)
     {
-        $user = User::findOrFail($id);
+        $user = User::with(['roles','migrantProfile'])->findOrFail($id);
+
+        if (!auth()->user()->is_admin) {
+            $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
+            $inMyRegion = $user->migrantProfile && in_array($user->migrantProfile->region_id, $myRegionIds);
+            if (!$inMyRegion) {
+                abort(403, 'You do not have permission to edit this user.');
+            }
+        }
+
         $roles = Role::all();
         return view('admin.users.edit', compact('user', 'roles'));
     }
 
-    // public function update(Request $request, $id)
-    // {
-    //     $data = $request->validate([
-    //         'name' => 'required|string|max:255',
-    //         'email' => 'required|email|max:255|unique:users,email,' . $id,
-    //         'status' => 'required|in:active,blocked,inactive',
-    //         'role_id' => 'required|exists:roles,id', // إضافة التحقق من صحة المسؤولية
-    //     ]);
-
-    //     $user = User::findOrFail($id);
-    //     $user->update($data);
-
-    //     return redirect()->back()->with('success', 'User updated successfully!');
-    // }
     public function update(Request $request, $id)
     {
-        // التحقق من المدخلات
+        $user = User::with('migrantProfile')->findOrFail($id);
+
+        if (!auth()->user()->is_admin) {
+            $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
+            $inMyRegion = $user->migrantProfile && in_array($user->migrantProfile->region_id, $myRegionIds);
+            if (!$inMyRegion) {
+                abort(403, 'You do not have permission to update this user.');
+            }
+        }
+
         $data = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email,' . $id,
-            'status' => 'required|in:active,blocked,inactive',
-            'role_ids' => 'required|array', // التأكد من أن الدور هو مصفوفة
-            'role_ids.*' => 'exists:roles,id', // التأكد من أن الأدوار موجودة في جدول الأدوار
+            'name'      => 'required|string|max:255',
+            'email'     => 'required|email|max:255|unique:users,email,' . $id,
+            'status'    => 'required|in:active,blocked,inactive',
+            'role_ids'  => 'required|array',
+            'role_ids.*'=> 'exists:roles,id',
         ]);
 
-        // العثور على المستخدم
-        $user = User::findOrFail($id);
+        $user->update([
+            'name'   => $data['name'],
+            'email'  => $data['email'],
+            'status' => $data['status'],
+        ]);
 
-        // تحديث بيانات المستخدم
-        $user->update($data);
+        $user->roles()->sync($request->role_ids);
 
-        // تحديث الأدوار باستخدام الدالة sync
-        $user->roles()->sync($request->role_ids); // ربط المستخدم بالأدوار المحددة
-
-        // إعادة التوجيه مع رسالة نجاح
         return redirect()->back()->with('success', 'User updated successfully!');
     }
 
-
-
     public function changeStatus($id)
     {
-        $user = User::find($id);
+        $user = User::with('migrantProfile')->find($id);
 
         if (!$user) {
             return redirect()->route('admin.users.index')->with('error', 'User not found');
+        }
+
+        if (!auth()->user()->is_admin) {
+            $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
+            $inMyRegion = $user->migrantProfile && in_array($user->migrantProfile->region_id, $myRegionIds);
+            if (!$inMyRegion) {
+                abort(403, 'You do not have permission to change this user status.');
+            }
         }
 
         $user->status = $user->status === 'active' ? 'blocked' : 'active';
@@ -107,17 +133,25 @@ public function index(Request $request)
         return redirect()->route('admin.users.index')->with('success', 'User status updated successfully');
     }
 
-
     public function destroy($id)
     {
-        $user = User::find($id);
-        $user->roles()->detach();
+        $user = User::with('migrantProfile')->find($id);
+
         if (!$user) {
             return redirect()->route('admin.users.index')->with('error', 'User not found');
         }
 
+        if (!auth()->user()->is_admin) {
+            $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
+            $inMyRegion = $user->migrantProfile && in_array($user->migrantProfile->region_id, $myRegionIds);
+            if (!$inMyRegion) {
+                abort(403, 'You do not have permission to delete this user.');
+            }
+        }
+
+        $user->roles()->detach();
         $user->delete();
 
-        return redirect()->route('admin.users.index')->with('success', ' User deleted successfully');
+        return redirect()->route('admin.users.index')->with('success', 'User deleted successfully');
     }
 }

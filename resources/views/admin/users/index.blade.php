@@ -162,15 +162,17 @@
                     <table class="table align-items-center justify-content-center mb-0">
                         <thead class="bg-gray-100">
                             <tr>
-                                <th class="text-secondary text-xs font-weight-semibold opacity-7">User</th>
-                                <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Email</th>
-                                <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Status</th>
-                                <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Role</th>
-                                <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Responsibility</th>
-                                <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Registered</th>
-                                <th class="text-center text-secondary text-xs font-weight-semibold opacity-7">Actions</th>
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7">User</th>
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Email</th>
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Status</th>
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Region</th> {{-- NEW --}}
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Role</th>
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Responsibility</th>
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Registered</th>
+                              <th class="text-center text-secondary text-xs font-weight-semibold opacity-7">Actions</th>
                             </tr>
-                        </thead>
+                          </thead>
+
                         <tbody>
                             @foreach ($users as $user)
                                 <tr>
@@ -193,6 +195,11 @@
                                             {{ ucfirst($user->status) }}
                                         </span>
                                     </td>
+                                    <td>
+                                        <p class="text-sm font-weight-normal mb-0">
+                                          {{ optional(optional($user->migrantProfile)->region)->name ?? '—' }} {{-- NEW --}}
+                                        </p>
+                                      </td>
                                     <td>
                                         <span class="badge bg-{{ $user->is_admin ? 'primary' : 'secondary' }}" style="color:black">
                                             {{ $user->is_admin ? 'Admin' : 'User' }}
@@ -321,16 +328,27 @@
 
                                     <!-- Role -->
                                     <div class="mb-3">
-                                        <label for="role_id-{{ $user->id }}" class="form-label fw-bold">User Responsibility</label>
+                                        <label for="role_ids-{{ $user->id }}" class="form-label fw-bold">User Responsibility (Roles)</label>
                                         <select class="form-select" id="role_ids-{{ $user->id }}" name="role_ids[]" multiple required>
-                                            @foreach($roles as $role)
-                                                <option value="{{ $role->id }}"
-                                                    {{ $user->roles->pluck('id')->contains($role->id) ? 'selected' : '' }}>
-                                                    {{ $role->name }}
-                                                </option>
-                                            @endforeach
+                                          @foreach($roles as $role)
+                                            <option value="{{ $role->id }}"
+                                              {{ $user->roles->pluck('id')->contains($role->id) ? 'selected' : '' }}>
+                                              {{ $role->name }}
+                                              @if($role->region?->name) — [{{ $role->region->name }}] @endif
+                                            </option>
+                                          @endforeach
                                         </select>
-                                    </div>
+
+                                        {{-- NEW: Hint of effective regions from current roles --}}
+                                        @php
+                                          $effectiveRegions = $user->roles->pluck('region.name')->filter()->unique()->values()->all();
+                                        @endphp
+                                        <small class="text-muted d-block mt-1">
+                                          Regions from selected roles:
+                                          <strong>{{ !empty($effectiveRegions) ? implode(', ', $effectiveRegions) : '—' }}</strong>
+                                        </small>
+                                      </div>
+
                                 </div>
                             </div>
                         </div>

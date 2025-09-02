@@ -14,15 +14,15 @@ return new class extends Migration
         Schema::create('stories', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->json('title');
-            $table->json('educational');
-            $table->json('my_story');
-            $table->json('country');
-            $table->json('aim');
-            $table->json('game');
-            $table->json('who_am_i');
-            $table->string('image');
-            $table->string('link');
+            $table->string('title')->nullable();
+            $table->string('educational')->nullable();
+            $table->string('my_story')->nullable();
+            $table->string('country')->nullable();
+            $table->string('aim')->nullable();
+            $table->string('game')->nullable();
+            $table->string('who_am_i')->nullable();
+            $table->string('image')->nullable();
+            $table->string('link')->nullable();
             $table->timestamps();
         });
     }

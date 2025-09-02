@@ -48,28 +48,34 @@
                             <tr>
                                 <th class="text-secondary text-xs font-weight-semibold opacity-7">Role Name</th>
                                 <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Status</th>
+                                <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Region</th> {{-- NEW --}}
                                 <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Created At</th>
                                 <th class="text-center text-secondary text-xs font-weight-semibold opacity-7">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @foreach ($roles as $role)
-                                <tr>
-                                    <td>
-                                        <div class="d-flex px-2">
-                                            <div class="my-auto">
-                                                <h6 class="mb-0 text-sm">{{ $role->name }}</h6>
-                                            </div>
+                        @foreach ($roles as $role)
+                            <tr>
+                                <td>
+                                    <div class="d-flex px-2">
+                                        <div class="my-auto">
+                                            <h6 class="mb-0 text-sm">{{ $role->name }}</h6>
                                         </div>
-                                    </td>
-                                    <td>
-                                        <span class="badge bg-{{ $role->status === 'active' ? 'success' : ($role->status === 'inactive' ? 'warning' : 'danger') }}" style="color:black">
-                                            {{ ucfirst($role->status) }}
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <p class="text-sm font-weight-normal mb-0">{{ $role->created_at->format('d/m/Y') }}</p>
-                                    </td>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="badge bg-{{ $role->status === 'active' ? 'success' : ($role->status === 'inactive' ? 'warning' : 'danger') }}" style="color:black">
+                                        {{ ucfirst($role->status) }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <p class="text-sm font-weight-normal mb-0">
+                                        {{ optional($role->region)->name ?? '—' }} {{-- NEW --}}
+                                    </p>
+                                </td>
+                                <td>
+                                    <p class="text-sm font-weight-normal mb-0">{{ $role->created_at->format('d/m/Y') }}</p>
+                                </td>
                                     <td class="align-middle text-center">
                                         <a href="{{ route('admin.roles.edit', $role->id) }}"
                                             class="text-secondary font-weight-bold text-xs me-2"

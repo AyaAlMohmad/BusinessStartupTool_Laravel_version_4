@@ -11,16 +11,32 @@ class BusinessSetupController extends Controller
 {
     public function index()
     {
+        // الأدمن يشوف الكل
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $setups = LegalStructure::with(['user', 'business', 'tasks'])->get();
+            $setups = LegalStructure::with([
+                'user.migrantProfile.region', // لإظهار المنطقة
+                'business',
+                'tasks'
+            ])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق أدوار المستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض business setups للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $setups = LegalStructure::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['user', 'business', 'tasks'])->get();
+            if (empty($myRegionIds)) {
+                $setups = collect(); // لا يرى شيئًا
+            } else {
+                // السجلات التي أصحابها ضمن مناطق أدوار المستخدم
+                $setups = LegalStructure::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region', 'business', 'tasks'])
+                    ->get();
+            }
         }
 
         return view('admin.business_setups.index', compact('setups'));
@@ -29,19 +45,31 @@ class BusinessSetupController extends Controller
     public function analysis()
     {
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $logs = AuditLog::where('table_name', 'legal_structures')->latest()->get();
-        } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
-
             $logs = AuditLog::where('table_name', 'legal_structures')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+                ->latest()
+                ->get();
+        } else {
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
+
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد لوجات التعديلات بحسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::where('table_name', 'legal_structures')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
+        // نفس معالجتك للإحصائيات
         $fieldCounts = [];
         $modificationsPerDay = [];
 
@@ -65,15 +93,21 @@ class BusinessSetupController extends Controller
 
     public function show($id)
     {
-        $setup = LegalStructure::with(['user', 'business', 'tasks'])->findOrFail($id);
+        $setup = LegalStructure::with(['user.migrantProfile.region', 'business', 'tasks'])
+            ->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $setupUserRoleIds = $setup->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم business setup أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($setupUserRoleIds)->isEmpty()) {
+            $setupRegionId = optional(optional($setup->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$setupRegionId || !in_array($setupRegionId, $myRegionIds)) {
                 return redirect()->route('admin.business_setups.index')->with('error', 'Access denied');
             }
         }
@@ -84,22 +118,26 @@ class BusinessSetupController extends Controller
             ->get();
 
         $latestLog = $auditLogs->first();
-        $oldData = $latestLog ? $latestLog->old_data : null;
+        $oldData   = $latestLog ? $latestLog->old_data : null;
 
         return view('admin.business_setups.show', compact('setup', 'oldData', 'auditLogs'));
     }
 
     public function destroy($id)
     {
-        $setup = LegalStructure::with('user')->findOrFail($id);
+        $setup = LegalStructure::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $setupUserRoleIds = $setup->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم business setup أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($setupUserRoleIds)->isEmpty()) {
+            $setupRegionId = optional(optional($setup->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$setupRegionId || !in_array($setupRegionId, $myRegionIds)) {
                 return redirect()->route('admin.business_setups.index')->with('error', 'Access denied');
             }
         }

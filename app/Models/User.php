@@ -78,6 +78,18 @@ public function hasAllPermissions(array $permissions): bool
 
     return $count === count($permissions);
 }
+public function migrantProfile()
+{
+    return $this->hasOne(MigrantProfile::class, 'user_id');
+}
+
+public function scopeInRegions($query, array $regionIds)
+{
+    return $query->whereHas('migrantProfile', function ($q) use ($regionIds) {
+        $q->whereIn('region_id', $regionIds);
+    });
+}
+
 // public function role()
 // {
 //     return $this->belongsTo(Role::class);

@@ -12,16 +12,28 @@ class BusinessIdeaController extends Controller
 {
     public function index()
     {
+        // admin يرى الجميع
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $businessIdeas = BusinessIdea::with('user')->get();
+            $businessIdeas = BusinessIdea::with(['user.migrantProfile.region'])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // اجمع مناطق الأدوار للمستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض business ideas للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $businessIdeas = BusinessIdea::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with('user')->get();
+            if (empty($myRegionIds)) {
+                $businessIdeas = collect();
+            } else {
+                // أفكار الأعمال التابعة لمستخدمين تقع مناطقهم ضمن مناطق أدوار الحالي
+                $businessIdeas = BusinessIdea::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region'])
+                    ->get();
+            }
         }
 
         return view('admin.business-ideas.index', compact('businessIdeas'));
@@ -32,17 +44,27 @@ class BusinessIdeaController extends Controller
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
             $logs = AuditLog::where('table_name', 'business_ideas')->latest()->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            $logs = AuditLog::where('table_name', 'business_ideas')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات بحسب منطقة صاحب التعديل (user) عبر بروفايله
+                $logs = AuditLog::where('table_name', 'business_ideas')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
+        // نفس المعالجة الموجودة عندك
         $fieldCounts = [];
         $modificationsPerDay = [];
 
@@ -66,15 +88,19 @@ class BusinessIdeaController extends Controller
 
     public function show($id)
     {
-        $businessIdea = BusinessIdea::with('user')->findOrFail($id);
+        $businessIdea = BusinessIdea::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $businessIdeaUserRoleIds = $businessIdea->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم business idea أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($businessIdeaUserRoleIds)->isEmpty()) {
+            $ideaRegionId = optional(optional($businessIdea->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$ideaRegionId || !in_array($ideaRegionId, $myRegionIds)) {
                 return redirect()->route('admin.business-ideas.index')->with('error', 'Access denied');
             }
         }
@@ -92,15 +118,19 @@ class BusinessIdeaController extends Controller
 
     public function destroy($id)
     {
-        $businessIdea = BusinessIdea::findOrFail($id);
+        $businessIdea = BusinessIdea::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $businessIdeaUserRoleIds = $businessIdea->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم business idea أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($businessIdeaUserRoleIds)->isEmpty()) {
+            $ideaRegionId = optional(optional($businessIdea->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$ideaRegionId || !in_array($ideaRegionId, $myRegionIds)) {
                 return redirect()->route('admin.business-ideas.index')->with('error', 'Access denied');
             }
         }

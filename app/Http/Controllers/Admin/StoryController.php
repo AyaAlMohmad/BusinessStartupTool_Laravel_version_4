@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
@@ -11,16 +12,28 @@ class StoryController extends Controller
 {
     public function index()
     {
+        // الأدمن يرى الجميع
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $stories = Story::with(['user'])->get();
+            $stories = Story::with(['user.migrantProfile.region'])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق أدوار المستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض stories للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $stories = Story::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['user'])->get();
+            if (empty($myRegionIds)) {
+                $stories = collect(); // لا يرى شيئًا
+            } else {
+                // القصص التي أصحابها ضمن مناطق أدوار المستخدم
+                $stories = Story::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region'])
+                    ->get();
+            }
         }
 
         return view('admin.stories.index', compact('stories'));
@@ -28,15 +41,20 @@ class StoryController extends Controller
 
     public function show($id)
     {
-        $story = Story::with(['user'])->findOrFail($id);
+        $story = Story::with(['user.migrantProfile.region'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $storyUserRoleIds = $story->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم story أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($storyUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($story->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.stories.index')->with('error', 'Access denied');
             }
         }
@@ -47,22 +65,26 @@ class StoryController extends Controller
             ->get();
 
         $latestLog = $auditLogs->first();
-        $oldData = $latestLog ? $latestLog->old_data : null;
+        $oldData   = $latestLog ? $latestLog->old_data : null;
 
         return view('admin.stories.show', compact('story', 'auditLogs', 'oldData'));
     }
 
     public function destroy($id)
     {
-        $story = Story::with('user')->findOrFail($id);
+        $story = Story::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $storyUserRoleIds = $story->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم story أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($storyUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($story->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.stories.index')->with('error', 'Access denied');
             }
         }
@@ -75,18 +97,28 @@ class StoryController extends Controller
 
     public function analysis()
     {
+        // الأدمن يرى كل اللوجات
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
             $logs = AuditLog::where('table_name', 'stories')->latest()->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            $logs = AuditLog::where('table_name', 'stories')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات حسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::where('table_name', 'stories')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
         $fieldCounts = [];
@@ -103,9 +135,10 @@ class StoryController extends Controller
             $modificationsPerDay[$date] = ($modificationsPerDay[$date] ?? 0) + 1;
         }
 
-        $modificationsPerDay = collect($modificationsPerDay)->map(function ($count, $date) {
-            return ['date' => $date, 'count' => $count];
-        })->sortBy('date')->values();
+        $modificationsPerDay = collect($modificationsPerDay)
+            ->map(fn ($count, $date) => ['date' => $date, 'count' => $count])
+            ->sortBy('date')
+            ->values();
 
         return view('admin.stories.analysis', compact('modificationsPerDay', 'fieldCounts'));
     }

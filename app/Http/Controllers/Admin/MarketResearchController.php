@@ -11,16 +11,28 @@ class MarketResearchController extends Controller
 {
     public function index()
     {
+        // الأدمن يرى الجميع
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $researches = MarketResearch::with(['user', 'business'])->get();
+            $researches = MarketResearch::with(['user.migrantProfile.region', 'business'])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق أدوار المستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض market researches للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $researches = MarketResearch::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['user', 'business'])->get();
+            if (empty($myRegionIds)) {
+                $researches = collect(); // لا يرى شيئًا
+            } else {
+                // السجلات التي أصحابها ضمن مناطق أدوار المستخدم
+                $researches = MarketResearch::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region', 'business'])
+                    ->get();
+            }
         }
 
         return view('admin.market-research.index', compact('researches'));
@@ -31,17 +43,27 @@ class MarketResearchController extends Controller
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
             $logs = AuditLog::where('table_name', 'market_research')->latest()->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            $logs = AuditLog::where('table_name', 'market_research')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات حسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::where('table_name', 'market_research')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
+        // نفس معالجتك
         $fieldCounts = [];
         $modificationsPerDay = [];
 
@@ -56,24 +78,30 @@ class MarketResearchController extends Controller
             $modificationsPerDay[$date] = ($modificationsPerDay[$date] ?? 0) + 1;
         }
 
-        $modificationsPerDay = collect($modificationsPerDay)->map(function ($count, $date) {
-            return ['date' => $date, 'count' => $count];
-        })->sortBy('date')->values();
+        $modificationsPerDay = collect($modificationsPerDay)
+            ->map(fn ($count, $date) => ['date' => $date, 'count' => $count])
+            ->sortBy('date')
+            ->values();
 
         return view('admin.market-research.analysis', compact('modificationsPerDay', 'fieldCounts'));
     }
 
     public function show($id)
     {
-        $research = MarketResearch::with(['user', 'business'])->findOrFail($id);
+        $research = MarketResearch::with(['user.migrantProfile.region', 'business'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $researchUserRoleIds = $research->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم market research أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($researchUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($research->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.market-research.index')->with('error', 'Access denied');
             }
         }
@@ -84,22 +112,26 @@ class MarketResearchController extends Controller
             ->get();
 
         $latestLog = $auditLogs->first();
-        $oldData = $latestLog ? $latestLog->old_data : null;
+        $oldData   = $latestLog ? $latestLog->old_data : null;
 
         return view('admin.market-research.show', compact('research', 'oldData', 'auditLogs'));
     }
 
     public function destroy($id)
     {
-        $research = MarketResearch::with('user')->findOrFail($id);
+        $research = MarketResearch::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $researchUserRoleIds = $research->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم market research أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($researchUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($research->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.market-research.index')->with('error', 'Access denied');
             }
         }

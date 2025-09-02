@@ -12,16 +12,28 @@ class FinancialPlannerController extends Controller
 {
     public function index()
     {
+        // الأدمن يشوف الكل
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $planners = FinancialPlanner::with(['business', 'user'])->get();
+            $planners = FinancialPlanner::with(['business', 'user.migrantProfile.region'])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق أدوار المستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض financial planners للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $planners = FinancialPlanner::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['business', 'user'])->get();
+            if (empty($myRegionIds)) {
+                $planners = collect(); // لا يرى شيئًا
+            } else {
+                // السجلات التي أصحابها ضمن مناطق أدوار المستخدم
+                $planners = FinancialPlanner::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['business', 'user.migrantProfile.region'])
+                    ->get();
+            }
         }
 
         return view('admin.financial_planners.index', compact('planners'));
@@ -32,17 +44,27 @@ class FinancialPlannerController extends Controller
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
             $logs = AuditLog::where('table_name', 'financial_planners')->latest()->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            $logs = AuditLog::where('table_name', 'financial_planners')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات حسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::where('table_name', 'financial_planners')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
+        // نفس معالجتك
         $fieldCounts = [];
         $modificationsPerDay = [];
 
@@ -57,24 +79,28 @@ class FinancialPlannerController extends Controller
             $modificationsPerDay[$date] = ($modificationsPerDay[$date] ?? 0) + 1;
         }
 
-        $modificationsPerDay = collect($modificationsPerDay)->map(function ($count, $date) {
-            return ['date' => $date, 'count' => $count];
-        })->sortBy('date')->values();
+        $modificationsPerDay = collect($modificationsPerDay)->map(fn ($count, $date) => ['date' => $date, 'count' => $count])
+            ->sortBy('date')->values();
 
         return view('admin.financial_planners.analysis', compact('modificationsPerDay', 'fieldCounts'));
     }
 
     public function show($id)
     {
-        $planner = FinancialPlanner::with(['business', 'user'])->findOrFail($id);
+        $planner = FinancialPlanner::with(['business', 'user.migrantProfile.region'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $plannerUserRoleIds = $planner->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم financial planner أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($plannerUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($planner->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.financial_planners.index')->with('error', 'Access denied');
             }
         }
@@ -85,22 +111,26 @@ class FinancialPlannerController extends Controller
             ->get();
 
         $latestLog = $auditLogs->first();
-        $oldData = $latestLog ? $latestLog->old_data : null;
+        $oldData   = $latestLog ? $latestLog->old_data : null;
 
         return view('admin.financial_planners.show', compact('planner', 'oldData', 'auditLogs'));
     }
 
     public function destroy($id)
     {
-        $planner = FinancialPlanner::with('user')->findOrFail($id);
+        $planner = FinancialPlanner::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $plannerUserRoleIds = $planner->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم financial planner أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($plannerUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($planner->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.financial_planners.index')->with('error', 'Access denied');
             }
         }

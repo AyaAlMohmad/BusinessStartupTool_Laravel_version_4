@@ -11,16 +11,28 @@ class SimpleSolutionController extends Controller
 {
     public function index()
     {
+        // الأدمن يرى الجميع
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
-            $solutions = SimpleSolution::with(['user', 'business'])->get();
+            $solutions = SimpleSolution::with(['user.migrantProfile.region', 'business'])->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            // مناطق الأدوار للمستخدم الحالي
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // عرض simple solutions للمستخدمين الذين لديهم نفس أدوار المستخدم الحالي
-            $solutions = SimpleSolution::whereHas('user.roles', function($query) use ($userRoleIds) {
-                $query->whereIn('roles.id', $userRoleIds);
-            })->with(['user', 'business'])->get();
+            if (empty($myRegionIds)) {
+                $solutions = collect(); // لا يرى شيئًا
+            } else {
+                // السجلات التي أصحابها ضمن مناطق أدواره
+                $solutions = SimpleSolution::whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->with(['user.migrantProfile.region', 'business'])
+                    ->get();
+            }
         }
 
         return view('admin.simple-solutions.index', compact('solutions'));
@@ -31,15 +43,24 @@ class SimpleSolutionController extends Controller
         if (Auth::user()->isAdmin() || Auth::user()->hasRole('admin')) {
             $logs = AuditLog::where('table_name', 'simple_solutions')->latest()->get();
         } else {
-            // الحصول على IDs الأدوار الخاصة بالمستخدم الحالي
-            $userRoleIds = Auth::user()->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            $logs = AuditLog::where('table_name', 'simple_solutions')
-                        ->whereHas('user.roles', function($query) use ($userRoleIds) {
-                            $query->whereIn('roles.id', $userRoleIds);
-                        })
-                        ->latest()
-                        ->get();
+            if (empty($myRegionIds)) {
+                $logs = collect();
+            } else {
+                // نقيّد اللوجات حسب منطقة منفّذ العملية (user)
+                $logs = AuditLog::where('table_name', 'simple_solutions')
+                    ->whereHas('user.migrantProfile', function ($q) use ($myRegionIds) {
+                        $q->whereIn('region_id', $myRegionIds);
+                    })
+                    ->latest()
+                    ->get();
+            }
         }
 
         $fieldCounts = [];
@@ -56,24 +77,30 @@ class SimpleSolutionController extends Controller
             $modificationsPerDay[$date] = ($modificationsPerDay[$date] ?? 0) + 1;
         }
 
-        $modificationsPerDay = collect($modificationsPerDay)->map(function ($count, $date) {
-            return ['date' => $date, 'count' => $count];
-        })->sortBy('date')->values();
+        $modificationsPerDay = collect($modificationsPerDay)
+            ->map(fn ($count, $date) => ['date' => $date, 'count' => $count])
+            ->sortBy('date')
+            ->values();
 
         return view('admin.simple-solutions.analysis', compact('modificationsPerDay', 'fieldCounts'));
     }
 
     public function show($id)
     {
-        $solution = SimpleSolution::with(['user', 'business'])->findOrFail($id);
+        $solution = SimpleSolution::with(['user.migrantProfile.region', 'business'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
+        // غير الأدمن مقيّد بمناطق أدواره
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $solutionUserRoleIds = $solution->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم simple solution أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($solutionUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($solution->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.simple-solutions.index')->with('error', 'Access denied');
             }
         }
@@ -84,29 +111,37 @@ class SimpleSolutionController extends Controller
             ->get();
 
         $latestLog = $auditLogs->first();
-        $oldData = $latestLog ? $latestLog->old_data : null;
+        $oldData   = $latestLog ? $latestLog->old_data : null;
 
         return view('admin.simple-solutions.show', compact('solution', 'oldData', 'auditLogs'));
     }
 
     public function destroy($id)
     {
-        $solution = SimpleSolution::with('user')->findOrFail($id);
+        $solution = SimpleSolution::with(['user.migrantProfile'])->findOrFail($id);
 
-        // التحقق من الصلاحية إذا لم يكن admin
         if (!Auth::user()->isAdmin() && !Auth::user()->hasRole('admin')) {
-            $userRoleIds = Auth::user()->roles->pluck('id');
-            $solutionUserRoleIds = $solution->user->roles->pluck('id');
+            $myRegionIds = Auth::user()->roles()
+                ->pluck('region_id')
+                ->filter()
+                ->unique()
+                ->values()
+                ->all();
 
-            // إذا لم يكن لدى مستخدم simple solution أي دور مشترك مع المستخدم الحالي
-            if ($userRoleIds->intersect($solutionUserRoleIds)->isEmpty()) {
+            $recordRegionId = optional(optional($solution->user)->migrantProfile)->region_id;
+
+            if (empty($myRegionIds) || !$recordRegionId || !in_array($recordRegionId, $myRegionIds)) {
                 return redirect()->route('admin.simple-solutions.index')->with('error', 'Access denied');
             }
         }
 
         $solution->delete();
 
+        // ملاحظة: كنتَ تعيد التوجيه لـ admin.start-simple.index
+        // إن كان هذا المطلوب، اتركه كما هو:
         return redirect()->route('admin.start-simple.index')
             ->with('success', 'Simple Solution deleted successfully.');
+        // أو لو تفضّل الرجوع لنفس شاشة السوليوشنز:
+        // return redirect()->route('admin.simple-solutions.index')->with('success', 'Simple Solution deleted successfully.');
     }
 }
