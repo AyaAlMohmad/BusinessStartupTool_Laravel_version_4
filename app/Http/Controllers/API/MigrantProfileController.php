@@ -5,6 +5,7 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Models\MigrantProfile;
 use App\Models\EmploymentHistory;
+use App\Models\Qualification;
 use App\Models\Region;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,7 +15,7 @@ class MigrantProfileController extends Controller
 {
     public function index()
     {
-        $profiles = MigrantProfile::with(['jobs', 'region'])
+        $profiles = MigrantProfile::with(['jobs', 'region', 'qualifications'])
             ->where('user_id', Auth::id())
             ->get();
 
@@ -31,7 +32,7 @@ class MigrantProfileController extends Controller
             'personalInfo.name'         => 'nullable|string',
             'personalInfo.birthPlace'   => 'nullable|string',
             'personalInfo.birthYear'    => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
-            'personalInfo.status'       => 'nullable|in:Migrant,Refugee,Aboriginal,Other',
+            'personalInfo.status'       => 'nullable|string',
             'personalInfo.culturalBackground' => 'nullable|string',
             'personalInfo.languages'    => 'nullable|string',
             'personalInfo.arrivalYear'  => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
@@ -57,12 +58,11 @@ class MigrantProfileController extends Controller
             'employment.jobs.*.relevant_skills.*' => 'nullable|string',
 
             'education.isStudying'  => 'nullable|in:yes,no',
-            'education.level'       => 'nullable|in:primary,secondary,trade,bachelor,diploma,master,phd',
-            'education.tradeDetails'=> 'nullable|string',
-            'education.bachelorDetails'=> 'nullable|string',
-            'education.diplomaDetails' => 'nullable|string',
-            'education.masterDetails'  => 'nullable|string',
-            'education.phdDetails'     => 'nullable|string',
+            'education.qualifications' => 'nullable|array',
+            'education.qualifications.*.level' => 'required|in:primary,secondary,trade,bachelor,diploma,master,phd',
+            'education.qualifications.*.details' => 'nullable|string',
+            'education.qualifications.*.institution' => 'nullable|string',
+            'education.qualifications.*.year' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
         ]);
 
         if ($validator->fails()) {
@@ -71,6 +71,7 @@ class MigrantProfileController extends Controller
                 'errors'  => $validator->errors(),
             ], 422);
         }
+
 
         try {
             // المنطقة (اختيارية) - تحقق من وجودها إن تم إرسالها
@@ -108,14 +109,17 @@ class MigrantProfileController extends Controller
                 'employment_role'     => data_get($request->all(), 'employment.role'),
 
                 'is_studying'         => data_get($request->all(), 'education.isStudying'),
-                'education_level'     => data_get($request->all(), 'education.level'),
-                'trade_details'       => data_get($request->all(), 'education.tradeDetails'),
-                'bachelor_details'    => data_get($request->all(), 'education.bachelorDetails'),
-                'diploma_details'     => data_get($request->all(), 'education.diplomaDetails'),
-                'master_details'      => data_get($request->all(), 'education.masterDetails'),
-                'phd_details'         => data_get($request->all(), 'education.phdDetails'),
-            ]);
-
+                      ]);
+                      $qualifications = data_get($request->all(), 'education.qualifications', []);
+                      foreach ($qualifications as $qualification) {
+                          Qualification::create([
+                              'migrant_profile_id' => $profile->id,
+                              'level'      => data_get($qualification, 'level'),
+                              'details'    => data_get($qualification, 'details'),
+                              'institution'=> data_get($qualification, 'institution'),
+                              'year'       => data_get($qualification, 'year'),
+                          ]);
+                      }
             // الوظائف
             $jobs = data_get($request->all(), 'employment.jobs', []);
             foreach ($jobs as $job) {
@@ -132,7 +136,7 @@ class MigrantProfileController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Profile created successfully',
-                'data'    => $this->formatProfileResponse($profile->fresh(['jobs', 'region'])),
+                'data'    => $this->formatProfileResponse($profile->fresh(['jobs', 'region', 'qualifications'])),
             ], 201);
         } catch (\Exception $e) {
             return response()->json([
@@ -146,7 +150,7 @@ class MigrantProfileController extends Controller
     public function show($id)
     {
         try {
-            $profile = MigrantProfile::with('jobs', 'region')
+            $profile = MigrantProfile::with('jobs', 'region', 'qualifications')
                 ->where('user_id', Auth::id())
                 ->findOrFail($id);
 
@@ -170,7 +174,7 @@ class MigrantProfileController extends Controller
             'personalInfo.name'         => 'nullable|string',
             'personalInfo.birthPlace'   => 'nullable|string',
             'personalInfo.birthYear'    => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
-            'personalInfo.status'       => 'nullable|in:Migrant,Refugee,Aboriginal,Other',
+            'personalInfo.status'       => 'nullable|string',
             'personalInfo.culturalBackground' => 'nullable|string',
             'personalInfo.languages'    => 'nullable|string',
             'personalInfo.arrivalYear'  => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
@@ -196,12 +200,11 @@ class MigrantProfileController extends Controller
             'employment.jobs.*.relevant_skills.*' => 'nullable|string',
 
             'education.isStudying'  => 'nullable|in:yes,no',
-            'education.level'       => 'nullable|in:primary,secondary,trade,bachelor,diploma,master,phd',
-            'education.tradeDetails'=> 'nullable|string',
-            'education.bachelorDetails'=> 'nullable|string',
-            'education.diplomaDetails' => 'nullable|string',
-            'education.masterDetails'  => 'nullable|string',
-            'education.phdDetails'     => 'nullable|string',
+            'education.qualifications' => 'nullable|array',
+            'education.qualifications.*.level' => 'required|in:primary,secondary,trade,bachelor,diploma,master,phd',
+            'education.qualifications.*.details' => 'nullable|string',
+            'education.qualifications.*.institution' => 'nullable|string',
+            'education.qualifications.*.year' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
         ]);
 
         if ($validator->fails()) {
@@ -277,20 +280,28 @@ class MigrantProfileController extends Controller
             // Education
             if ($request->has('education')) {
                 $profile->update([
-                    'is_studying'      => data_get($request->all(), 'education.isStudying', $profile->is_studying),
-                    'education_level'  => data_get($request->all(), 'education.level', $profile->education_level),
-                    'trade_details'    => data_get($request->all(), 'education.tradeDetails', $profile->trade_details),
-                    'bachelor_details' => data_get($request->all(), 'education.bachelorDetails', $profile->bachelor_details),
-                    'diploma_details'  => data_get($request->all(), 'education.diplomaDetails', $profile->diploma_details),
-                    'master_details'   => data_get($request->all(), 'education.masterDetails', $profile->master_details),
-                    'phd_details'      => data_get($request->all(), 'education.phdDetails', $profile->phd_details),
+                    'is_studying' => data_get($request->all(), 'education.isStudying', $profile->is_studying),
                 ]);
+
+                if ($request->has('education.qualifications')) {
+                    $profile->qualifications()->delete();
+
+                    foreach (data_get($request->all(), 'education.qualifications', []) as $qualification) {
+                        Qualification::create([
+                            'migrant_profile_id'  => $profile->id,
+                            'level'       => data_get($qualification, 'level'),
+                            'details'     => data_get($qualification, 'details'),
+                            'institution' => data_get($qualification, 'institution'),
+                            'year'        => data_get($qualification, 'year'),
+                        ]);
+                    }
+                }
             }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Profile updated successfully',
-                'data'    => $this->formatProfileResponse($profile->fresh(['jobs', 'region'])),
+                'data'    => $this->formatProfileResponse($profile->fresh(['jobs', 'region', 'qualifications'])),
             ]);
         } catch (\Exception $e) {
             return response()->json([
@@ -306,6 +317,7 @@ class MigrantProfileController extends Controller
         try {
             $profile = MigrantProfile::where('user_id', Auth::id())->findOrFail($id);
             $profile->jobs()->delete();
+            $profile->qualifications()->delete();
             $profile->delete();
 
             return response()->json([
@@ -361,13 +373,15 @@ class MigrantProfileController extends Controller
                 })->toArray(),
             ],
             'education' => [
-                'isStudying'      => $profile->is_studying,
-                'level'           => $profile->education_level,
-                'tradeDetails'    => $profile->trade_details,
-                'bachelorDetails' => $profile->bachelor_details,
-                'diplomaDetails'  => $profile->diploma_details,
-                'masterDetails'   => $profile->master_details,
-                'phdDetails'      => $profile->phd_details,
+                'isStudying'     => $profile->is_studying,
+                'qualifications' => $profile->qualifications->map(function ($qualification) {
+                    return [
+                        'level'       => $qualification->level,
+                        'details'     => $qualification->details,
+                        'institution' => $qualification->institution,
+                        'year'        => $qualification->year,
+                    ];
+                })->toArray(),
             ],
         ];
     }

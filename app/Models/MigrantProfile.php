@@ -52,7 +52,10 @@ class MigrantProfile extends Model
     {
         return $this->belongsTo(User::class);
     }
-
+    public function qualifications()
+    {
+        return $this->hasMany(Qualification::class);
+    }
     public function jobs()
     {
         return $this->hasMany(EmploymentHistory::class, 'profile_id');
