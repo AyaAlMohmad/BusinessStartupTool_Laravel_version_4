@@ -12,9 +12,24 @@ class StoryController extends Controller
 {
     public function index()
     {
-        // إن أردت تقييدها على المستخدم الحالي فقط، أزل التعليق عن where('user_id', Auth::id())
-        $stories = Story::with(['user', 'businessPhotos'])
-            // ->where('user_id', Auth::id())
+        $stories = Story::select([
+                'id',
+                'user_id',
+                'business_name',
+                'my_story',
+                'business_description',
+                'business_solution',
+                'business_impact',
+                'future_plans',
+                'email',
+                'website',
+                'phone',
+                'profile_photo',
+                'created_at',
+                'updated_at'
+            ])
+            ->with(['user:id,name,email', 'businessPhotos:id,story_id,path']) // فقط الحقول الضرورية من العلاقات
+            ->where('user_id', Auth::id()) // أزل التعليق إذا أردت قصص المستخدم فقط
             ->get();
 
         return response()->json([
@@ -114,7 +129,26 @@ class StoryController extends Controller
     public function show($id)
     {
         try {
-            $story = Story::with(['user', 'businessPhotos'])->findOrFail($id);
+            // $story = Story::with(['user', 'businessPhotos'])->findOrFail($id);
+            $story = Story::select([
+                'id',
+                'user_id',
+                'business_name',
+                'my_story',
+                'business_description',
+                'business_solution',
+                'business_impact',
+                'future_plans',
+                'email',
+                'website',
+                'phone',
+                'profile_photo',
+                'created_at',
+                'updated_at'
+            ])
+            ->with(['user:id,name,email', 'businessPhotos:id,story_id,path']) // فقط الحقول الضرورية من العلاقات
+            ->findOrFail($id);
+
 
             return response()->json([
                 'success' => true,

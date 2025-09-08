@@ -261,6 +261,7 @@
 
                                 <!-- Edit User Modal -->
                             <!-- Edit User Modal -->
+<!-- Edit User Modal -->
 <div class="modal fade" id="editUserModal-{{ $user->id }}" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -296,6 +297,21 @@
                                         <input type="email" class="form-control" id="email-{{ $user->id }}" name="email" value="{{ $user->email }}" required>
                                         <small class="text-muted">User's primary email address</small>
                                     </div>
+
+                                    <!-- Region -->
+                                    <div class="mb-3">
+                                        <label for="region_id-{{ $user->id }}" class="form-label fw-bold">Region</label>
+                                        <select class="form-select" id="region_id-{{ $user->id }}" name="region_id">
+                                            <option value="">— Select Region —</option>
+                                            @foreach(\App\Models\Region::all() as $region)
+                                                <option value="{{ $region->id }}"
+                                                    {{ optional(optional($user->migrantProfile)->region)->id == $region->id ? 'selected' : '' }}>
+                                                    {{ $region->name }}
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <small class="text-muted">User's primary region</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -329,7 +345,7 @@
                                     <!-- Role -->
                                     <div class="mb-3">
                                         <label for="role_ids-{{ $user->id }}" class="form-label fw-bold">User Responsibility (Roles)</label>
-                                        <select class="form-select" id="role_ids-{{ $user->id }}" name="role_ids[]" multiple required>
+                                        <select class="form-select" id="role_ids-{{ $user->id }}" name="role_ids[]" multiple >
                                           @foreach($roles as $role)
                                             <option value="{{ $role->id }}"
                                               {{ $user->roles->pluck('id')->contains($role->id) ? 'selected' : '' }}>
@@ -339,7 +355,6 @@
                                           @endforeach
                                         </select>
 
-                                        {{-- NEW: Hint of effective regions from current roles --}}
                                         @php
                                           $effectiveRegions = $user->roles->pluck('region.name')->filter()->unique()->values()->all();
                                         @endphp
@@ -347,8 +362,7 @@
                                           Regions from selected roles:
                                           <strong>{{ !empty($effectiveRegions) ? implode(', ', $effectiveRegions) : '—' }}</strong>
                                         </small>
-                                      </div>
-
+                                    </div>
                                 </div>
                             </div>
                         </div>

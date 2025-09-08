@@ -57,6 +57,8 @@ return new class extends Migration
             $table->string('company')->nullable();
             $table->string('industry')->nullable();
             $table->integer('years')->nullable();
+          $table->json('relevant_skills')->nullable();
+
             $table->timestamps();
         });
     }

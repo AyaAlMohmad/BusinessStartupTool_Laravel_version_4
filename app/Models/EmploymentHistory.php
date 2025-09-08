@@ -2,12 +2,13 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
 class EmploymentHistory extends Model
 {
-    use HasFactory;
+    use HasFactory,Auditable;
 
     protected $table = 'employment_history'; // تحديد اسم الجدول هنا
 
@@ -16,8 +17,14 @@ class EmploymentHistory extends Model
         'role',
         'company',
         'industry',
-        'years'
+        'years',
+        'relevant_skills'
     ];
+ protected $casts = [
+        'years'            => 'integer',
+        'relevant_skills'  => 'array',   // ← مهم: يخزّن JSON ويعيد Array تلقائياً
+    ];
+
 
     public function profile()
     {

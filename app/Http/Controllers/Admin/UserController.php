@@ -80,6 +80,36 @@ class UserController extends Controller
         return view('admin.users.edit', compact('user', 'roles'));
     }
 
+    // public function update(Request $request, $id)
+    // {
+    //     $user = User::with('migrantProfile')->findOrFail($id);
+
+    //     if (!auth()->user()->is_admin) {
+    //         $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
+    //         $inMyRegion = $user->migrantProfile && in_array($user->migrantProfile->region_id, $myRegionIds);
+    //         if (!$inMyRegion) {
+    //             abort(403, 'You do not have permission to update this user.');
+    //         }
+    //     }
+
+    //     $data = $request->validate([
+    //         'name'      => 'required|string|max:255',
+    //         'email'     => 'required|email|max:255|unique:users,email,' . $id,
+    //         'status'    => 'required|in:active,blocked,inactive',
+    //         'role_ids'  => 'required|array',
+    //         'role_ids.*'=> 'exists:roles,id',
+    //     ]);
+
+    //     $user->update([
+    //         'name'   => $data['name'],
+    //         'email'  => $data['email'],
+    //         'status' => $data['status'],
+    //     ]);
+
+    //     $user->roles()->sync($request->role_ids);
+
+    //     return redirect()->back()->with('success', 'User updated successfully!');
+    // }
     public function update(Request $request, $id)
     {
         $user = User::with('migrantProfile')->findOrFail($id);
@@ -98,19 +128,43 @@ class UserController extends Controller
             'status'    => 'required|in:active,blocked,inactive',
             'role_ids'  => 'required|array',
             'role_ids.*'=> 'exists:roles,id',
+            'region_id' => 'nullable|exists:regions,id',
+            'is_admin'  => 'required|in:0,1',
         ]);
 
         $user->update([
-            'name'   => $data['name'],
-            'email'  => $data['email'],
-            'status' => $data['status'],
+            'name'    => $data['name'],
+            'email'   => $data['email'],
+            'status'  => $data['status'],
+            'is_admin'=> $data['is_admin'],
         ]);
+
+        // تحديث منطقة المستخدم - مع التعامل مع حالات عدم وجود migrantProfile
+        if (isset($data['region_id'])) {
+            if ($user->migrantProfile) {
+                // إذا كان لديه migrantProfile، قم بتحديث المنطقة
+                $user->migrantProfile->update([
+                    'region_id' => $data['region_id']
+                ]);
+            } else {
+                // إذا لم يكن لديه migrantProfile، قم بإنشاء واحد جديد
+                \App\Models\MigrantProfile::create([
+                    'user_id' => $user->id,
+                    'region_id' => $data['region_id'],
+                    'name' => $user->name // يمكنك إضافة بيانات افتراضية أخرى إذا لزم الأمر
+                ]);
+            }
+        } elseif ($user->migrantProfile) {
+            // إذا تم إرسال region_id فارغ وكان لديه migrantProfile، قم بإزالة المنطقة
+            $user->migrantProfile->update([
+                'region_id' => null
+            ]);
+        }
 
         $user->roles()->sync($request->role_ids);
 
         return redirect()->back()->with('success', 'User updated successfully!');
     }
-
     public function changeStatus($id)
     {
         $user = User::with('migrantProfile')->find($id);
