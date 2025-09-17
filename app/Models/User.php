@@ -23,6 +23,7 @@ class User extends Authenticatable
         'registration_date',
         'last_login',
         'progress',
+        'region_id',
     ];
 
     protected $hidden = [
@@ -35,6 +36,10 @@ class User extends Authenticatable
         'registration_date' => 'datetime',
         'last_login' => 'datetime',
     ];
+    public function region()
+    {
+        return $this->belongsTo(Region::class);
+    }
 // في User.php
 public function roles()
 {
@@ -94,4 +99,12 @@ public function scopeInRegions($query, array $regionIds)
 // {
 //     return $this->belongsTo(Role::class);
 // }
+public function resources()
+{
+    return $this->belongsToMany(Resource::class, 'resource_user');
+}
+public function images()
+{
+    return $this->hasMany(Image::class);
+}
 }

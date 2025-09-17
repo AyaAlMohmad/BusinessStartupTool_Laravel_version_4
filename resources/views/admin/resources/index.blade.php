@@ -12,15 +12,6 @@
                         </div>
                         <div class="ms-auto d-flex">
                             <div class="ms-auto d-flex">
-
-                                {{-- <div class="input-group input-group-sm ms-auto me-2">
-                                <span class="input-group-text text-body">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="16px" height="16px" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 115.196 5.196a7.5 7.5 0 0110.607 10.607z" />
-                                    </svg>
-                                </span>
-                                <input type="search" class="form-control" id="searchInput" placeholder="Search...">
-                            </div> --}}
                                 <div class="btn-group ms-2">
                                     <button type="button" class="btn btn-sm btn-dark dropdown-toggle"
                                         data-bs-toggle="dropdown" aria-expanded="false">
@@ -37,17 +28,17 @@
                                     </ul>
                                 </div>
                                 <div class="btn-group ms-2">
-                                <a href="{{ route('admin.resources.create') }}"
-                                class="btn btn-sm btn-dark ">
-                                    <span class="btn-inner--icon">
-                                        <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                            viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="me-1">
-                                            <path stroke-linecap="round" stroke-linejoin="round"
-                                                d="M12 4.5v15m7.5-7.5h-15" />
-                                        </svg>
-                                    </span>
-                                    <span class="btn-inner--text">Add resource</span>
-                                </a>
+                                    <a href="{{ route('admin.resources.create') }}"
+                                        class="btn btn-sm btn-dark ">
+                                        <span class="btn-inner--icon">
+                                            <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                                viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="me-1">
+                                                <path stroke-linecap="round" stroke-linejoin="round"
+                                                    d="M12 4.5v15m7.5-7.5h-15" />
+                                            </svg>
+                                        </span>
+                                        <span class="btn-inner--text">Add resource</span>
+                                    </a>
                                 </div>
                             </div>
                         </div>
@@ -58,14 +49,12 @@
                         <table class="table align-items-center justify-content-center mb-0">
                             <thead class="bg-gray-100">
                                 <tr>
-                                    <th class="text-secondary text-xs font-weight-semibold opacity-7"> Title</th>
-                                    <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2"> Region</th>
-                                    <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2"> Description</th>
-
+                                    <th class="text-secondary text-xs font-weight-semibold opacity-7">Title</th>
+                                    <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Type</th>
+                                    <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Region/Users</th>
+                                    <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Description</th>
                                     <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Link</th>
-
-                                    <th class="text-center text-secondary text-xs font-weight-semibold opacity-7">Actions
-                                    </th>
+                                    <th class="text-center text-secondary text-xs font-weight-semibold opacity-7">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -79,14 +68,48 @@
                                             </div>
                                         </td>
                                         <td>
-                                            <p class="text-sm font-weight-normal mb-0">{{ $resource->region->name }}</p>
+                                            <span class="badge bg-{{ $resource->is_global ? 'success' : 'info' }}">
+                                                {{ $resource->is_global ? 'Global' : 'Regional' }}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            @if($resource->is_global)
+                                                <span class="text-sm font-weight-normal text-success">
+                                                    All Users
+                                                </span>
+                                            @else
+                                                @if($resource->region)
+                                                    <span class="text-sm font-weight-normal">
+                                                        {{ $resource->region->name }}
+                                                    </span>
+                                                    @if($resource->users->count() > 0)
+                                                        <br>
+                                                        <small class="text-muted">
+                                                            + {{ $resource->users->count() }} assigned user(s)
+                                                        </small>
+                                                    @endif
+                                                @elseif($resource->users->count() > 0)
+                                                    <span class="text-sm font-weight-normal text-info">
+                                                        {{ $resource->users->count() }} assigned user(s)
+                                                    </span>
+                                                @else
+                                                    <span class="text-sm font-weight-normal text-warning">
+                                                        No region or users assigned
+                                                    </span>
+                                                @endif
+                                            @endif
                                         </td>
                                         <td>
                                             <p class="text-sm font-weight-normal mb-0">
-                                                {{ $resource->description}}</p>
+                                                {{ Str::limit($resource->description, 50) }}
+                                            </p>
                                         </td>
                                         <td>
-                                            <p class="text-sm font-weight-normal mb-0"><a href="{{ $resource->link}}"  >{{ $resource->link}}</a></p>
+                                            <p class="text-sm font-weight-normal mb-0">
+                                                <a href="{{ $resource->link }}" target="_blank">
+                                                    {{ Str::limit($resource->link, 30) }}
+                                                </a>
+                                            </p>
                                         </td>
                                         <td class="align-middle text-center">
                                             <a href="{{ route('admin.resources.edit', $resource->id) }}"
@@ -160,131 +183,64 @@
 
     <script>
         $(document).ready(function() {
-
-            let searchTimer;
-            $('#searchInput').on('input', function() {
-                clearTimeout(searchTimer);
-                searchTimer = setTimeout(function() {
-                    performSearch($('#searchInput').val());
-                }, 500);
-            });
-
-            $('#searchInput').on('keypress', function(e) {
-                if (e.which === 13) {
-                    performSearch($(this).val());
-                }
-            });
-
-
-            function performSearch(query) {
-                $.ajax({
-                    url: "{{ route('admin.resources.index') }}",
-                    type: "GET",
-                    data: {
-                        search: query
-                    },
-                    success: function(data) {
-                        const newTable = $(data).find('table').html();
-                        const newPagination = $(data).find('.pagination').html();
-
-                        $('table tbody').html($(newTable).find('tbody').html());
-                        $('.pagination').html(newPagination);
-                    }
-                });
-            }
-
             $('#exportExcel').click(function(e) {
                 e.preventDefault();
                 exportToExcel();
             });
-
 
             $('#exportPDF').click(function(e) {
                 e.preventDefault();
                 exportToPDF();
             });
 
-
             function exportToExcel() {
-
                 const data = [];
-                const headers = [];
-
-                $('table thead th').each(function() {
-                    headers.push($(this).text().trim());
-                });
+                const headers = ['Title', 'Type', 'Region/Users', 'Description', 'Link'];
                 data.push(headers);
 
-
                 $('table tbody tr').each(function() {
-                    const rowData = [];
-                    $(this).find('td').each(function() {
-                        rowData.push($(this).text().trim());
-                    });
+                    const rowData = [
+                        $(this).find('td:eq(0)').text().trim(),
+                        $(this).find('td:eq(1) .badge').text().trim(),
+                        $(this).find('td:eq(2)').text().trim(),
+                        $(this).find('td:eq(3)').text().trim(),
+                        $(this).find('td:eq(4) a').attr('href') || $(this).find('td:eq(4)').text().trim()
+                    ];
                     data.push(rowData);
                 });
-
 
                 const wb = XLSX.utils.book_new();
                 const ws = XLSX.utils.aoa_to_sheet(data);
-                XLSX.utils.book_append_sheet(wb, ws, "resource");
-
-
-                XLSX.writeFile(wb, "resource_export.xlsx");
+                XLSX.utils.book_append_sheet(wb, ws, "Resources");
+                XLSX.writeFile(wb, "resources_export.xlsx");
             }
 
             function exportToPDF() {
-                const {
-                    jsPDF
-                } = window.jspdf;
+                const { jsPDF } = window.jspdf;
                 const doc = new jsPDF();
 
-
-                const headers = [];
-                $('table thead th').each(function() {
-                    headers.push($(this).text().trim());
-                });
-
+                const headers = [['Title', 'Type', 'Region/Users', 'Description', 'Link']];
                 const data = [];
+
                 $('table tbody tr').each(function() {
-                    const rowData = [];
-                    $(this).find('td').each(function() {
-                        rowData.push($(this).text().trim());
-                    });
+                    const rowData = [
+                        $(this).find('td:eq(0)').text().trim(),
+                        $(this).find('td:eq(1) .badge').text().trim(),
+                        $(this).find('td:eq(2)').text().trim(),
+                        $(this).find('td:eq(3)').text().trim(),
+                        $(this).find('td:eq(4) a').attr('href') || $(this).find('td:eq(4)').text().trim()
+                    ];
                     data.push(rowData);
                 });
 
-
                 doc.autoTable({
-                    head: [headers],
+                    head: headers,
                     body: data,
-                    styles: {
-                        fontSize: 8
-                    },
-                    margin: {
-                        top: 20
-                    }
+                    styles: { fontSize: 8 },
+                    margin: { top: 20 }
                 });
-                doc.save('resource_export.pdf');
+                doc.save('resources_export.pdf');
             }
-
-
-            $(document).on('click', '.pagination a', function(e) {
-                e.preventDefault();
-                const url = $(this).attr('href');
-                const searchQuery = $('#searchInput').val();
-
-                $.ajax({
-                    url: url + (searchQuery ? '&search=' + encodeURIComponent(searchQuery) : ''),
-                    success: function(data) {
-                        const newTable = $(data).find('table').html();
-                        const newPagination = $(data).find('.pagination').html();
-
-                        $('table tbody').html($(newTable).find('tbody').html());
-                        $('.pagination').html(newPagination);
-                    }
-                });
-            });
         });
     </script>
 @endsection

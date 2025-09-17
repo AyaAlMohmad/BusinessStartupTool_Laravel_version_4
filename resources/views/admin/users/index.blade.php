@@ -141,19 +141,6 @@
                                 <li><a class="dropdown-item" href="#" id="exportPDF">PDF</a></li>
                             </ul>
                         </div>
-                        {{-- <div class="btn-group ms-2">
-                            <a href="{{ route('admin.users.create') }}"
-                            class="btn btn-sm btn-dark">
-                                <span class="btn-inner--icon">
-                                    <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg" fill="none"
-                                        viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="me-1">
-                                        <path stroke-linecap="round" stroke-linejoin="round"
-                                            d="M12 4.5v15m7.5-7.5h-15" />
-                                    </svg>
-                                </span>
-                                <span class="btn-inner--text">Add User</span>
-                            </a>
-                        </div> --}}
                     </div>
                 </div>
             </div>
@@ -165,7 +152,7 @@
                               <th class="text-secondary text-xs font-weight-semibold opacity-7">User</th>
                               <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Email</th>
                               <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Status</th>
-                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Region</th> {{-- NEW --}}
+                              <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Region</th>
                               <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Role</th>
                               <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Responsibility</th>
                               <th class="text-secondary text-xs font-weight-semibold opacity-7 ps-2">Registered</th>
@@ -197,7 +184,7 @@
                                     </td>
                                     <td>
                                         <p class="text-sm font-weight-normal mb-0">
-                                          {{ optional(optional($user->migrantProfile)->region)->name ?? '—' }} {{-- NEW --}}
+                                          {{ optional($user->region)->name ?? '—' }}
                                         </p>
                                       </td>
                                     <td>
@@ -260,128 +247,146 @@
                                 </tr>
 
                                 <!-- Edit User Modal -->
-                            <!-- Edit User Modal -->
-<!-- Edit User Modal -->
-<div class="modal fade" id="editUserModal-{{ $user->id }}" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <form action="{{ route('admin.users.update', $user->id) }}" method="POST">
-                @csrf
-                @method('PUT')
+                                <div class="modal fade" id="editUserModal-{{ $user->id }}" tabindex="-1" aria-labelledby="editUserModalLabel" aria-hidden="true">
+                                    <div class="modal-dialog modal-lg">
+                                        <div class="modal-content">
+                                            <form action="{{ route('admin.users.update', $user->id) }}" method="POST">
+                                                @csrf
+                                                @method('PUT')
 
-                <div class="modal-header">
-                    <h5 class="modal-title text-dark" id="editUserModalLabel">
-                        <i class="fas fa-user-edit me-2"></i>Edit User: {{ $user->name }}
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
+                                                <div class="modal-header">
+                                                    <h5 class="modal-title text-dark" id="editUserModalLabel">
+                                                        <i class="fas fa-user-edit me-2"></i>Edit User: {{ $user->name }}
+                                                    </h5>
+                                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                                </div>
 
-                <div class="modal-body">
-                    <div class="row">
-                        <!-- Left Column - Basic Info -->
-                        <div class="col-md-6">
-                            <div class="card mb-3">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Basic Information</h6>
+                                                <div class="modal-body">
+                                                    <div class="row">
+                                                        <!-- Left Column - Basic Info -->
+                                                        <div class="col-md-6">
+                                                            <div class="card mb-3">
+                                                                <div class="card-header bg-light">
+                                                                    <h6 class="mb-0">Basic Information</h6>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <!-- Name -->
+                                                                    <div class="mb-3">
+                                                                        <label for="name-{{ $user->id }}" class="form-label fw-bold">Full Name</label>
+                                                                        <input type="text" class="form-control" id="name-{{ $user->id }}" name="name" value="{{ old('name', $user->name) }}" required>
+                                                                        @error('name')
+                                                                            <div class="text-danger small">{{ $message }}</div>
+                                                                        @enderror
+                                                                    </div>
+
+                                                                    <!-- Email -->
+                                                                    <div class="mb-3">
+                                                                        <label for="email-{{ $user->id }}" class="form-label fw-bold">Email Address</label>
+                                                                        <input type="email" class="form-control" id="email-{{ $user->id }}" name="email" value="{{ old('email', $user->email) }}" required>
+                                                                        <small class="text-muted">User's primary email address</small>
+                                                                        @error('email')
+                                                                            <div class="text-danger small">{{ $message }}</div>
+                                                                        @enderror
+                                                                    </div>
+
+                                                                    <!-- Region -->
+                                                                    <div class="mb-3">
+                                                                        <label for="region_id-{{ $user->id }}" class="form-label fw-bold">Region</label>
+                                                                        <select class="form-select" id="region_id-{{ $user->id }}" name="region_id">
+                                                                            <option value="">— Select Region —</option>
+                                                                            @foreach($regions as $region)
+                                                                                <option value="{{ $region->id }}"
+                                                                                    {{ old('region_id', $user->region_id) == $region->id ? 'selected' : '' }}>
+                                                                                    {{ $region->name }}
+                                                                                </option>
+                                                                            @endforeach
+                                                                        </select>
+                                                                        <small class="text-muted">User's primary region</small>
+                                                                        @error('region_id')
+                                                                            <div class="text-danger small">{{ $message }}</div>
+                                                                        @enderror
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Right Column - Account Settings -->
+                                                        <div class="col-md-6">
+                                                            <div class="card mb-3">
+                                                                <div class="card-header bg-light">
+                                                                    <h6 class="mb-0">Account Settings</h6>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <!-- Status -->
+                                                                    <div class="mb-3">
+                                                                        <label for="status-{{ $user->id }}" class="form-label fw-bold">Account Status</label>
+                                                                        <select class="form-select" id="status-{{ $user->id }}" name="status" required>
+                                                                            <option value="active" {{ old('status', $user->status) == 'active' ? 'selected' : '' }}>Active</option>
+                                                                            <option value="inactive" {{ old('status', $user->status) == 'inactive' ? 'selected' : '' }}>Inactive</option>
+                                                                            <option value="blocked" {{ old('status', $user->status) == 'blocked' ? 'selected' : '' }}>Blocked</option>
+                                                                        </select>
+                                                                        @error('status')
+                                                                            <div class="text-danger small">{{ $message }}</div>
+                                                                        @enderror
+                                                                    </div>
+
+                                                                    <!-- Admin Status -->
+                                                                    <div class="mb-3">
+                                                                        <label for="is_admin-{{ $user->id }}" class="form-label fw-bold">Admin Privileges</label>
+                                                                        <select class="form-select" id="is_admin-{{ $user->id }}" name="is_admin" required>
+                                                                            <option value="0" {{ old('is_admin', $user->is_admin) == 0 ? 'selected' : '' }}>Regular User</option>
+                                                                            <option value="1" {{ old('is_admin', $user->is_admin) == 1 ? 'selected' : '' }}>Administrator</option>
+                                                                        </select>
+                                                                        @error('is_admin')
+                                                                            <div class="text-danger small">{{ $message }}</div>
+                                                                        @enderror
+                                                                    </div>
+
+                                                                    <!-- Role -->
+                                                                    <div class="mb-3">
+                                                                        <label for="role_ids-{{ $user->id }}" class="form-label fw-bold">User Responsibility (Roles)</label>
+                                                                        <select class="form-select" id="role_ids-{{ $user->id }}" name="role_ids[]" multiple>
+                                                                            @foreach($roles as $role)
+                                                                                <option value="{{ $role->id }}"
+                                                                                    {{ in_array($role->id, old('role_ids', $user->roles->pluck('id')->toArray())) ? 'selected' : '' }}>
+                                                                                    {{ $role->name }}
+                                                                                    @if($role->region?->name) — [{{ $role->region->name }}] @endif
+                                                                                </option>
+                                                                            @endforeach
+                                                                        </select>
+
+                                                                        @php
+                                                                            $effectiveRegions = $user->roles->pluck('region.name')->filter()->unique()->values()->all();
+                                                                        @endphp
+                                                                        <small class="text-muted d-block mt-1">
+                                                                            Regions from selected roles:
+                                                                            <strong>{{ !empty($effectiveRegions) ? implode(', ', $effectiveRegions) : '—' }}</strong>
+                                                                        </small>
+                                                                        @error('role_ids')
+                                                                            <div class="text-danger small">{{ $message }}</div>
+                                                                        @enderror
+                                                                        @error('role_ids.*')
+                                                                            <div class="text-danger small">{{ $message }}</div>
+                                                                        @enderror
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="modal-footer bg-light">
+                                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                                        <i class="fas fa-times me-1"></i> Cancel
+                                                    </button>
+                                                    <button type="submit" class="btn btn-success">
+                                                        <i class="fas fa-save me-1"></i> Save Changes
+                                                    </button>
+                                                </div>
+                                            </form>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div class="card-body">
-                                    <!-- Name -->
-                                    <div class="mb-3">
-                                        <label for="name-{{ $user->id }}" class="form-label fw-bold">Full Name</label>
-                                        <input type="text" class="form-control" id="name-{{ $user->id }}" name="name" value="{{ $user->name }}" required>
-                                    </div>
-
-                                    <!-- Email -->
-                                    <div class="mb-3">
-                                        <label for="email-{{ $user->id }}" class="form-label fw-bold">Email Address</label>
-                                        <input type="email" class="form-control" id="email-{{ $user->id }}" name="email" value="{{ $user->email }}" required>
-                                        <small class="text-muted">User's primary email address</small>
-                                    </div>
-
-                                    <!-- Region -->
-                                    <div class="mb-3">
-                                        <label for="region_id-{{ $user->id }}" class="form-label fw-bold">Region</label>
-                                        <select class="form-select" id="region_id-{{ $user->id }}" name="region_id">
-                                            <option value="">— Select Region —</option>
-                                            @foreach(\App\Models\Region::all() as $region)
-                                                <option value="{{ $region->id }}"
-                                                    {{ optional(optional($user->migrantProfile)->region)->id == $region->id ? 'selected' : '' }}>
-                                                    {{ $region->name }}
-                                                </option>
-                                            @endforeach
-                                        </select>
-                                        <small class="text-muted">User's primary region</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Right Column - Account Settings -->
-                        <div class="col-md-6">
-                            <div class="card mb-3">
-                                <div class="card-header bg-light">
-                                    <h6 class="mb-0">Account Settings</h6>
-                                </div>
-                                <div class="card-body">
-                                    <!-- Status -->
-                                    <div class="mb-3">
-                                        <label for="status-{{ $user->id }}" class="form-label fw-bold">Account Status</label>
-                                        <select class="form-select" id="status-{{ $user->id }}" name="status" required>
-                                            <option value="active" {{ $user->status == 'active' ? 'selected' : '' }}>Active</option>
-                                            <option value="inactive" {{ $user->status == 'inactive' ? 'selected' : '' }}>Inactive</option>
-                                            <option value="blocked" {{ $user->status == 'blocked' ? 'selected' : '' }}>Blocked</option>
-                                        </select>
-                                    </div>
-
-                                    <!-- Admin Status -->
-                                    <div class="mb-3">
-                                        <label for="is_admin-{{ $user->id }}" class="form-label fw-bold">Admin Privileges</label>
-                                        <select class="form-select" id="is_admin-{{ $user->id }}" name="is_admin" required>
-                                            <option value="0" {{ $user->is_admin == 0 ? 'selected' : '' }}>Regular User</option>
-                                            <option value="1" {{ $user->is_admin == 1 ? 'selected' : '' }}>Administrator</option>
-                                        </select>
-                                    </div>
-
-                                    <!-- Role -->
-                                    <div class="mb-3">
-                                        <label for="role_ids-{{ $user->id }}" class="form-label fw-bold">User Responsibility (Roles)</label>
-                                        <select class="form-select" id="role_ids-{{ $user->id }}" name="role_ids[]" multiple >
-                                          @foreach($roles as $role)
-                                            <option value="{{ $role->id }}"
-                                              {{ $user->roles->pluck('id')->contains($role->id) ? 'selected' : '' }}>
-                                              {{ $role->name }}
-                                              @if($role->region?->name) — [{{ $role->region->name }}] @endif
-                                            </option>
-                                          @endforeach
-                                        </select>
-
-                                        @php
-                                          $effectiveRegions = $user->roles->pluck('region.name')->filter()->unique()->values()->all();
-                                        @endphp
-                                        <small class="text-muted d-block mt-1">
-                                          Regions from selected roles:
-                                          <strong>{{ !empty($effectiveRegions) ? implode(', ', $effectiveRegions) : '—' }}</strong>
-                                        </small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="modal-footer bg-light">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i> Cancel
-                    </button>
-                    <button type="submit" class="btn btn-success">
-                        <i class="fas fa-save me-1"></i> Save Changes
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
                             @endforeach
                         </tbody>
                     </table>

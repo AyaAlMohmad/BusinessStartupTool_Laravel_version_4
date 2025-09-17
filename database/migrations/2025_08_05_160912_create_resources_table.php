@@ -16,17 +16,28 @@ return new class extends Migration
             $table->string('title');
             $table->text('description')->nullable();
             $table->string('link')->nullable();
-            $table->foreignId('region_id')->constrained()->onDelete('cascade');
+            $table->foreignId('region_id')->nullable()->constrained()->onDelete('set null');
+            $table->boolean('is_global')->default(false);
             $table->timestamps();
         });
+
+        // إنشاء جدول وسيط للعلاقة بين المستخدمين والموارد
+        Schema::create('resource_user', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('resource_id')->constrained()->onDelete('cascade');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->timestamps();
+
+            $table->unique(['resource_id', 'user_id']);
+        });
     }
-    
 
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
+        Schema::dropIfExists('resource_user');
         Schema::dropIfExists('resources');
     }
 };

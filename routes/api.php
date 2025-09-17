@@ -10,6 +10,7 @@ use App\Http\Controllers\API\BusinessSetupController;
 use App\Http\Controllers\API\ConversionRateController;
 use App\Http\Controllers\API\DownloadController;
 use App\Http\Controllers\API\FinancialPlannerController;
+use App\Http\Controllers\API\ImageController;
 use App\Http\Controllers\API\LaunchPreparationController;
 use App\Http\Controllers\API\LegalStructureController;
 use App\Http\Controllers\API\MarketingChannelController;
@@ -118,7 +119,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/regions', [RegionController::class, 'index']);
     Route::get('/resources', [ResourceController::class, 'index']);
     Route::get('/resources/region/{region_id}', [ResourceController::class, 'byRegion']);
-
+    Route::get('/resources/global', [ResourceController::class, 'global']);
+    Route::get('/resources/private', [ResourceController::class, 'private'])->middleware('auth:sanctum');
+    Route::get('/resources/local/{region_id}', [ResourceController::class, 'local']);
+    Route::get('/resources/user/{user_id}', [ResourceController::class, 'forUser']);
+    Route::get('/resources/unassigned', [ResourceController::class, 'unassigned']);
+    Route::get('/resources/search', [ResourceController::class, 'search']);
+    Route::apiResource('images', ImageController::class);
+    Route::post('edit/images/{id}', [ImageController::class, 'update']);
+    Route::get('users/{userId}/images', [ImageController::class, 'getUserImages']);
     Route::prefix('migrant-profiles')->group(function () {
         Route::get('/', [MigrantProfileController::class, 'index']);
         Route::get('/{id}', [MigrantProfileController::class, 'show']);

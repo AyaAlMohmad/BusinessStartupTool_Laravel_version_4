@@ -47,7 +47,7 @@ class MigrantProfileController extends Controller
             'business.hasSocialMedia'=> 'nullable|boolean',
             'business.socialLinks'  => 'nullable|string',
 
-            'employment.status'     => 'nullable|in:employed,unemployed,student,retired,other',
+            'employment.status'     => 'nullable|string',
             'employment.role'       => 'nullable|string',
             'employment.jobs'       => 'nullable|array',
             'employment.jobs.*.role'    => 'nullable|string',
@@ -189,7 +189,7 @@ class MigrantProfileController extends Controller
             'business.hasSocialMedia'=> 'nullable|boolean',
             'business.socialLinks'  => 'nullable|string',
 
-            'employment.status'     => 'nullable|in:employed,unemployed,student,retired,other',
+            'employment.status'     => 'nullable|string',
             'employment.role'       => 'nullable|string',
             'employment.jobs'       => 'nullable|array',
             'employment.jobs.*.role'    => 'nullable|string',
