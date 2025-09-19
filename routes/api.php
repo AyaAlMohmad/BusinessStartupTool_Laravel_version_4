@@ -134,6 +134,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::put('/{id}', [MigrantProfileController::class, 'update']);
         Route::post('/', [MigrantProfileController::class, 'store']);
         Route::delete('/{id}', [MigrantProfileController::class, 'destroy']);
+        Route::patch('/progress', [MigrantProfileController::class, 'updateProgress']);
     });
 
     Route::prefix('stories')->group(function () {

@@ -39,6 +39,7 @@ class MigrantProfile extends Model
         'master_details',
         'phd_details',
         'relevant_skills',
+        'progress'
     ];
 
     protected $casts = [

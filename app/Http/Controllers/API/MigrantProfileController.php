@@ -332,57 +332,107 @@ class MigrantProfileController extends Controller
             ], 500);
         }
     }
+    public function updateProgress(Request $request)
+    {
+        $request->validate([
+            'progress' => 'required|boolean',
+        ]);
 
+        // البحث عن سجل MigrantProfile الحالي
+        $migrantProfile = MigrantProfile::where('user_id', Auth::id())
+            ->latest()
+            ->first();
+
+        if (!$migrantProfile) {
+            // إنشاء ملف مهاجر جديد إذا لم يوجد
+            $migrantProfile = MigrantProfile::create([
+                'user_id' => Auth::id(),
+                'progress' => $request->progress,
+                'name' => null,
+                'birth_place' => null,
+                'birth_year' => null,
+                'status' => null,
+                'cultural_background' => null,
+                'languages' => null,
+                'arrival_year' => null,
+                'visa_category' => null,
+                'business_stage' => null,
+                'business_idea' => null,
+                'has_abn' => false,
+                'has_website' => false,
+                'website_url' => null,
+                'has_social_media' => false,
+                'social_links' => null,
+                'employment_status' => null,
+                'employment_role' => null,
+                'is_studying' => null
+            ]);
+
+            return response()->json([
+                'message' => 'Migrant profile created with progress updated',
+                'data' => $this->formatProfileResponse($migrantProfile)
+            ], 201);
+        }
+
+        // تحديث التقدم إذا كان الملف موجوداً
+        $migrantProfile->update(['progress' => $request->progress]);
+
+        return response()->json([
+            'message' => 'Progress updated successfully',
+            'data' => $this->formatProfileResponse($migrantProfile->fresh(['jobs', 'region', 'qualifications']))
+        ], 200);
+    }
     public function formatProfileResponse($profile)
     {
         return [
             'personalInfo' => [
-                'id'                => $profile->id,
-                'name'              => $profile->name,
-                'birthPlace'        => $profile->birth_place,
-                'birthYear'         => $profile->birth_year,
-                'status'            => $profile->status,
-                'culturalBackground'=> $profile->cultural_background,
-                'languages'         => $profile->languages,
-                'arrivalYear'       => $profile->arrival_year,
-                'visaCategory'      => $profile->visa_category,
-                // 'region'            => $profile->region
-            //         ? ['id' => $profile->region->id, 'name' => $profile->region->name]
-            //         : null,
+                'id' => $profile->id,
+                'name' => $profile->name,
+                'birthPlace' => $profile->birth_place,
+                'birthYear' => $profile->birth_year,
+                'status' => $profile->status,
+                'culturalBackground' => $profile->cultural_background,
+                'languages' => $profile->languages,
+                'arrivalYear' => $profile->arrival_year,
+                'visaCategory' => $profile->visa_category,
+                // 'region' => $profile->region
+                //         ? ['id' => $profile->region->id, 'name' => $profile->region->name]
+                //         : null,
             ],
             'business' => [
-                'stage'         => $profile->business_stage,
-                'idea'          => $profile->business_idea,
-                'hasAbn'        => $profile->has_abn,
-                'hasWebsite'    => $profile->has_website,
-                'websiteUrl'    => $profile->website_url,
-                'hasSocialMedia'=> $profile->has_social_media,
-                'socialLinks'   => $profile->social_links,
+                'stage' => $profile->business_stage,
+                'idea' => $profile->business_idea,
+                'hasAbn' => $profile->has_abn,
+                'hasWebsite' => $profile->has_website,
+                'websiteUrl' => $profile->website_url,
+                'hasSocialMedia' => $profile->has_social_media,
+                'socialLinks' => $profile->social_links,
             ],
             'employment' => [
                 'status' => $profile->employment_status,
-                'role'   => $profile->employment_role,
-                'jobs'   => $profile->jobs->map(function ($job) {
+                'role' => $profile->employment_role,
+                'jobs' => $profile->jobs->map(function ($job) {
                     return [
-                        'role'            => $job->role,
-                        'company'         => $job->company,
-                        'industry'        => $job->industry,
-                        'years'           => $job->years,
+                        'role' => $job->role,
+                        'company' => $job->company,
+                        'industry' => $job->industry,
+                        'years' => $job->years,
                         'relevant_skills' => $job->relevant_skills,
                     ];
                 })->toArray(),
             ],
             'education' => [
-                'isStudying'     => $profile->is_studying,
+                'isStudying' => $profile->is_studying,
                 'qualifications' => $profile->qualifications->map(function ($qualification) {
                     return [
-                        'level'       => $qualification->level,
-                        'details'     => $qualification->details,
+                        'level' => $qualification->level,
+                        'details' => $qualification->details,
                         'institution' => $qualification->institution,
-                        'year'        => $qualification->year,
+                        'year' => $qualification->year,
                     ];
                 })->toArray(),
             ],
+            'progress' => $profile->progress // إضافة معلومات التقدم للاستجابة
         ];
     }
 
@@ -408,4 +458,7 @@ class MigrantProfileController extends Controller
         $out = array_values(array_unique($out));
         return $out ?: null;
     }
+
+
+
 }
