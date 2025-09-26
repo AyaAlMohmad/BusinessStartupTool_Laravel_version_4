@@ -7,7 +7,7 @@ use App\Models\Region;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
-
+use Illuminate\Support\Facades\Hash;
 class UserController extends Controller
 {
     public function index(Request $request)
@@ -81,40 +81,49 @@ class UserController extends Controller
         return view('admin.users.edit', compact('user', 'roles', 'regions'));
     }
 
-    public function update(Request $request, $id)
-    {
-        $user = User::findOrFail($id);
 
-        if (!auth()->user()->is_admin) {
-            $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
-            $inMyRegion = $user->region_id && in_array($user->region_id, $myRegionIds); // تغيير للتحقق من region_id مباشرة
-            if (!$inMyRegion) {
-                abort(403, 'You do not have permission to update this user.');
-            }
-        }
+public function update(Request $request, $id)
+{
+    $user = User::findOrFail($id);
 
-        $data = $request->validate([
-            'name'      => 'required|string|max:255',
-            'email'     => 'required|email|max:255|unique:users,email,' . $id,
-            'status'    => 'required|in:active,blocked,inactive',
-            'role_ids'  => 'required|array',
-            'role_ids.*'=> 'exists:roles,id',
-            'region_id' => 'nullable|exists:regions,id',
-            'is_admin'  => 'required|in:0,1',
-        ]);
-
-        $user->update([
-            'name'      => $data['name'],
-            'email'     => $data['email'],
-            'status'    => $data['status'],
-            'is_admin'  => $data['is_admin'],
-            'region_id' => $data['region_id'], // تحديث region_id مباشرة
-        ]);
-
-        $user->roles()->sync($request->role_ids);
-
-        return redirect()->back()->with('success', 'User updated successfully!');
+    if (!auth()->user()->is_admin) {
+        $myRegionIds = auth()->user()->roles()->pluck('region_id')->filter()->unique()->values()->all();
+        $inMyRegion  = $user->region_id && in_array($user->region_id, $myRegionIds);
+        if (!$inMyRegion) abort(403, 'You do not have permission to update this user.');
     }
+
+    $data = $request->validate([
+        'name'       => 'nullable|string|max:255',
+        'email'      => 'nullable|email|max:255|unique:users,email,' . (int)$id,
+        'status'     => 'nullable|in:active,blocked,inactive',
+        'role_ids'   => 'nullable|array',
+        'role_ids.*' => 'exists:roles,id',
+        'region_id'  => 'nullable|exists:regions,id',
+        'is_admin'   => 'nullable|in:0,1',
+        'password'   => 'nullable|string|min:8|confirmed',
+    ]);
+
+    $user->fill([
+        'name'      => $data['name'],
+        'email'     => $data['email'],
+        'status'    => $data['status'],
+        'is_admin'  => $data['is_admin'],
+        'region_id' => $data['region_id'] ?? null,
+    ]);
+
+    if ($request->filled('password')) {
+        $user->password = $request->password; // الـ mutator سيعمل الهاش
+    }
+
+    $user->save();
+    $user->roles()->sync($request->role_ids);
+
+    return back()->with('success', 'User updated successfully!');
+}
+
+
+
+
 
     public function changeStatus($id)
     {

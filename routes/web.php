@@ -201,7 +201,8 @@ Route::prefix('admin/')->name('admin.')->middleware(['auth', 'admin'])->group(fu
     Route::get('financial-planners/analysis', [FinancialPlannerController::class, 'analysis'])
         ->name('financial_planners.analysis')
         ->middleware('permission:view_financial_analysis');
-
+// إضافة هذا السطر مع routes الأخرى
+Route::post('/users/{id}/reset-password', [UserController::class, 'resetPassword'])->name('admin.users.reset-password');
     // Websites
     Route::resource('websites', WebsiteController::class)
         ->middleware('permission:manage_websites');
@@ -216,6 +217,6 @@ Route::prefix('admin/')->name('admin.')->middleware(['auth', 'admin'])->group(fu
         ->name('stories.analysis')
         ->middleware('permission:view_story_analysis');
 
-    
+
 });
 require __DIR__ . '/auth.php';

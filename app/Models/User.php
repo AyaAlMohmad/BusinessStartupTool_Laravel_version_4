@@ -8,6 +8,7 @@ use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 use App\Models\Role;
+use Illuminate\Support\Facades\Hash;
 
 class User extends Authenticatable
 {
@@ -106,5 +107,11 @@ public function resources()
 public function images()
 {
     return $this->hasMany(Image::class);
+}
+public function setPasswordAttribute($value)
+{
+    if ($value) {
+        $this->attributes['password'] = Hash::make($value);
+    }
 }
 }
